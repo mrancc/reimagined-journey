@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { useGame } from './composables/useGame';
+import type { GameMode } from './types/game';
 
 const { game, startGame, initCanvas } = useGame();
 const canvasRef = ref<HTMLCanvasElement | null>(null);
@@ -11,13 +12,35 @@ const overlayTitle = ref('');
 const overlayMessage = ref('');
 const overlayScore = ref('');
 const overlayKills = ref('');
+const overlayLevel = ref('');
+const overlayWave = ref('');
+const isNewRecord = ref(false);
 
-function handleStart() {
+function handleStart(mode: GameMode) {
   showOverlay.value = false;
-  startGame();
+  isNewRecord.value = false;
+  startGame(mode);
   if (canvasRef.value) {
     canvasRef.value.focus();
   }
+}
+
+function returnToMenu() {
+  // 重置游戏状态回到模式选择界面
+  game.running = false;
+  game.over = false;
+  game.win = false;
+  showOverlay.value = true;
+  overlayTitle.value = '';
+  overlayMessage.value = '';
+  overlayScore.value = '';
+  overlayKills.value = '';
+  overlayLevel.value = '';
+  overlayWave.value = '';
+}
+
+function restartSurvival() {
+  handleStart('survival');
 }
 
 onMounted(() => {
@@ -30,10 +53,32 @@ onMounted(() => {
 watch(() => game.over, (over) => {
   if (over) {
     showOverlay.value = true;
-    overlayTitle.value = game.win ? '胜利！' : '游戏结束';
-    overlayMessage.value = game.win ? '所有敌人已消灭！' : '坦克已被摧毁';
-    overlayScore.value = `得分: ${game.score}`;
-    overlayKills.value = `击杀: ${game.kills} 辆 | 关卡: ${game.level}`;
+    if (game.mode === 'classic') {
+      // 经典模式结束界面
+      if (game.win) {
+        overlayTitle.value = '恭喜通关！';
+        overlayMessage.value = '你已成功击败所有BOSS！';
+      } else {
+        overlayTitle.value = '游戏结束';
+        overlayMessage.value = '坦克已被摧毁';
+      }
+      overlayScore.value = `最终得分: ${game.score}`;
+      overlayKills.value = `总击杀: ${game.kills} 辆`;
+      overlayLevel.value = `到达关卡: 第 ${game.level} / 15 关`;
+      overlayWave.value = '';
+    } else {
+      // 生存模式结束界面
+      overlayTitle.value = '生存结束';
+      overlayMessage.value = '你的坦克已阵亡';
+      overlayScore.value = `最终得分: ${game.score}`;
+      overlayKills.value = `总击杀: ${game.kills} 辆`;
+      overlayLevel.value = '';
+      overlayWave.value = `存活波数: 第 ${game.wave} 波`;
+      // 检查是否打破纪录
+      if (game.score > 0 && game.score >= game.highScore) {
+        isNewRecord.value = true;
+      }
+    }
   }
 });
 </script>
@@ -43,29 +88,96 @@ watch(() => game.over, (over) => {
     <!-- Overlay -->
     <div v-if="showOverlay" 
          class="fixed inset-0 bg-black/85 flex flex-col items-center justify-center z-100">
-      <h1 class="text-5xl text-[#00ff88] mb-2 tracking-widest" 
-          :class="{ 'text-[#ff4444]': overlayTitle === '游戏结束' }">
-        {{ overlayTitle || '坦克大战' }}
-      </h1>
-      <div class="text-[#8899aa] text-base mb-10">
-        {{ overlayMessage || 'BATTLE CITY — Classic Edition' }}
-      </div>
       
-      <div v-if="overlayScore" class="text-2xl text-[#ffd700] my-3">
-        {{ overlayScore }}
-      </div>
-      <div v-if="overlayKills" class="text-sm text-[#8899aa] mb-8">
-        {{ overlayKills }}
-      </div>
+      <!-- 模式选择界面 -->
+      <template v-if="!game.running && !game.over && !overlayTitle">
+        <h1 class="text-5xl text-[#00ff88] mb-2 tracking-widest">
+          坦克大战
+        </h1>
+        <div class="text-[#8899aa] text-base mb-10">
+          BATTLE CITY — Classic Edition
+        </div>
+        
+        <div class="mode-select">
+          <div class="mode-card mode-classic" @click="handleStart('classic')">
+            <h3>经典闯关</h3>
+            <p>15关逐步挑战，击败BOSS通关</p>
+          </div>
+          <div class="mode-card mode-survival" @click="handleStart('survival')">
+            <h3>无尽生存</h3>
+            <p>无限波次挑战，争夺最高分</p>
+            <div v-if="game.highScore > 0" class="high-score">
+              最高分: {{ game.highScore }}
+            </div>
+          </div>
+        </div>
 
-      <button @click="handleStart" 
-              class="big-btn">
-        {{ overlayTitle ? '再来一次' : '开始游戏' }}
-      </button>
+        <div class="mt-6 text-xs text-[#556] leading-relaxed">
+          <span class="ctrl-key">W A S D</span> 或方向键 移动 &nbsp;|&nbsp;
+          <span class="ctrl-key">Space</span> 射击
+        </div>
+      </template>
 
-      <div v-if="!overlayTitle" class="mt-6 text-xs text-[#556] leading-relaxed">
-        <span class="ctrl-key">W A S D</span> 或方向键 移动 &nbsp;|&nbsp;
-        <span class="ctrl-key">Space</span> 射击
+      <!-- 游戏结束界面 -->
+      <template v-else>
+        <h1 class="text-5xl mb-2 tracking-widest" 
+            :class="{ 
+              'text-[#00ff88]': overlayTitle === '恭喜通关！',
+              'text-[#ff4444]': overlayTitle === '游戏结束' || overlayTitle === '生存结束'
+            }">
+          {{ overlayTitle }}
+        </h1>
+        <div class="text-[#8899aa] text-base mb-6">
+          {{ overlayMessage }}
+        </div>
+        
+        <div v-if="overlayScore" class="text-2xl text-[#ffd700] my-2">
+          {{ overlayScore }}
+        </div>
+        <div v-if="overlayKills" class="text-lg text-[#8899aa] my-1">
+          {{ overlayKills }}
+        </div>
+        <div v-if="overlayLevel" class="text-lg text-[#00ff88] my-1">
+          {{ overlayLevel }}
+        </div>
+        <div v-if="overlayWave" class="text-lg text-[#ff8844] my-1">
+          {{ overlayWave }}
+        </div>
+        
+        <!-- 生存模式最高分显示 -->
+        <div v-if="game.mode === 'survival'" class="mt-4 text-center">
+          <div class="text-xl text-[#ffd700]">
+            最高分: {{ game.highScore }}
+          </div>
+          <div v-if="isNewRecord" class="new-record">
+            新纪录！
+          </div>
+        </div>
+
+        <!-- 经典模式结束按钮 -->
+        <div v-if="game.mode === 'classic'" class="mt-8">
+          <button @click="returnToMenu" class="big-btn">
+            返回主菜单
+          </button>
+        </div>
+
+        <!-- 生存模式结束按钮 -->
+        <div v-else class="mt-8 flex gap-4">
+          <button @click="restartSurvival" class="big-btn">
+            再来一次
+          </button>
+          <button @click="returnToMenu" class="big-btn btn-secondary">
+            返回主菜单
+          </button>
+        </div>
+      </template>
+    </div>
+
+    <!-- Wave Transition Overlay -->
+    <div v-if="game.waveTransition && game.running" class="wave-transition-overlay">
+      <div class="wave-info">
+        <div class="wave-number">第 {{ game.wave }} 波</div>
+        <div class="wave-hint">准备迎战!</div>
       </div>
     </div>
 
@@ -94,16 +206,39 @@ watch(() => game.over, (over) => {
 
       <!-- Sidebar -->
       <div class="sidebar">
+        <!-- 战况面板 -->
         <div class="panel">
           <div class="panel-title">战况</div>
           <div class="stat-row">
             <span class="stat-label">得分</span>
             <span class="stat-value score-value">{{ game.score }}</span>
           </div>
-          <div class="stat-row">
-            <span class="stat-label">关卡</span>
-            <span class="stat-value level-value">{{ game.level }}</span>
-          </div>
+          
+          <!-- 经典模式：关卡进度 -->
+          <template v-if="game.mode === 'classic'">
+            <div class="stat-row">
+              <span class="stat-label">关卡</span>
+              <span class="stat-value level-value">第 {{ game.level }} / 15 关</span>
+            </div>
+            <!-- BOSS关卡标识 -->
+            <div v-if="game.bossActive" class="boss-indicator">
+              BOSS关卡
+            </div>
+          </template>
+          
+          <!-- 生存模式：波次 -->
+          <template v-else>
+            <div class="stat-row">
+              <span class="stat-label">波次</span>
+              <span class="stat-value wave-value">第 {{ game.wave }} 波</span>
+            </div>
+            <!-- 生存模式最高分 -->
+            <div class="stat-row">
+              <span class="stat-label">最高分</span>
+              <span class="stat-value high-score-value">{{ game.highScore }}</span>
+            </div>
+          </template>
+          
           <div class="stat-row">
             <span class="stat-label">击杀</span>
             <span class="stat-value">{{ game.kills }}</span>
@@ -120,13 +255,28 @@ watch(() => game.over, (over) => {
           </div>
         </div>
 
-        <div class="panel">
+        <!-- 经典模式：剩余敌人 -->
+        <div v-if="game.mode === 'classic'" class="panel">
           <div class="panel-title">剩余敌人</div>
           <div class="text-center py-1.5">
-            <span class="enemy-count">{{ Math.max(0, game.totalEnemies - game.kills) }}</span>
+            <span class="enemy-count">{{ Math.max(0, game.totalEnemies - game.enemiesSpawned + game.enemies.filter(e => e.alive).length) }}</span>
           </div>
           <div class="flex flex-wrap gap-0.5 mt-1.5">
-            <div v-for="i in Math.min(Math.max(0, game.totalEnemies - game.kills), 20)" 
+            <div v-for="i in Math.min(Math.max(0, game.totalEnemies - game.enemiesSpawned + game.enemies.filter(e => e.alive).length), 20)" 
+                 :key="i" 
+                 class="enemy-icon">
+            </div>
+          </div>
+        </div>
+
+        <!-- 生存模式：本波剩余 -->
+        <div v-else class="panel">
+          <div class="panel-title">本波剩余</div>
+          <div class="text-center py-1.5">
+            <span class="enemy-count">{{ Math.max(0, game.waveEnemiesLeft) }}</span>
+          </div>
+          <div class="flex flex-wrap gap-0.5 mt-1.5">
+            <div v-for="i in Math.min(Math.max(0, game.waveEnemiesLeft), 20)" 
                  :key="i" 
                  class="enemy-icon">
             </div>

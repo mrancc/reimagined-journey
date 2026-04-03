@@ -1,11 +1,12 @@
 import { ref, reactive, onMounted, onUnmounted } from 'vue';
-import type { PowerupType } from '../types/game';
+import type { PowerupType, GameMode } from '../types/game';
 import {
   TILE, COLS, ROWS, W, H,
   DIR, DX, DY,
   TILE_EMPTY, TILE_BRICK, TILE_STEEL, TILE_WATER, TILE_FOREST, TILE_BASE,
-  POWERUP_TYPES, LEVELS, levelEnemyCount, enemySpeed, enemyFireRate, enemyHp,
-  enemyColor, getEnemyType, rectsOverlap
+  POWERUP_TYPES, levelEnemyCount, enemySpeed, enemyFireRate, enemyHp,
+  enemyColor, getEnemyType, rectsOverlap,
+  getLevelMap, getSurvivalMap, getWaveConfig, isBossLevel, bossHp
 } from '../types/game';
 
 // ============================================================
@@ -248,6 +249,16 @@ export interface GameState {
   shieldTimer: number;
   rapidFireTimer: number;
   frame: number;
+  // 新增字段
+  mode: GameMode;          // 当前游戏模式 'classic' | 'survival'
+  wave: number;            // 生存模式当前波次
+  highScore: number;       // 生存模式最高分（从 localStorage 读取）
+  waveTimer: number;       // 波次间隔计时（帧数）
+  waveEnemiesLeft: number; // 本波剩余敌人数
+  waveTransition: boolean; // 是否在波次过渡中
+  waveTransitionTimer: number; // 波次过渡显示时间
+  bossActive: boolean;     // 当前是否有BOSS
+  bossTank: Tank | null;   // BOSS坦克引用（用于UI血条显示）
 }
 
 export function useGame() {
@@ -277,6 +288,16 @@ export function useGame() {
     shieldTimer: 0,
     rapidFireTimer: 0,
     frame: 0,
+    // 新增字段初始化
+    mode: 'classic',
+    wave: 0,
+    highScore: 0,
+    waveTimer: 0,
+    waveEnemiesLeft: 0,
+    waveTransition: false,
+    waveTransitionTimer: 0,
+    bossActive: false,
+    bossTank: null,
   });
 
   const keys = reactive<{ [key: string]: boolean }>({});
@@ -319,6 +340,16 @@ export function useGame() {
       shieldTimer: 0,
       rapidFireTimer: 0,
       frame: 0,
+      // 新增字段初始化
+      mode: 'classic',
+      wave: 0,
+      highScore: parseInt(localStorage.getItem('tankHighScore') || '0'),
+      waveTimer: 0,
+      waveEnemiesLeft: 0,
+      waveTransition: false,
+      waveTransitionTimer: 0,
+      bossActive: false,
+      bossTank: null,
     };
   }
 
@@ -327,19 +358,68 @@ export function useGame() {
   }
 
   function spawnEnemy() {
-    if (game.enemiesSpawned >= game.totalEnemies) return;
+    if (game.mode === 'classic') {
+      if (game.enemiesSpawned >= game.totalEnemies) return;
+    }
     if (game.enemies.filter(e => e.alive).length >= game.maxEnemiesOnScreen) return;
 
     const spawns = [[0, 0], [6, 0], [12, 0]] as [number, number][];
     const sp = spawns[game.enemiesSpawned % 3];
-    const type = getEnemyType(game.level);
+    
+    let type: number;
+    let speed: number;
+    let fireRate: number;
+    let hp: number;
+    let color: string;
+    
+    if (game.mode === 'survival') {
+      // 生存模式
+      const config = getWaveConfig(game.wave);
+      type = config.enemyTypes[Math.floor(Math.random() * config.enemyTypes.length)];
+      speed = enemySpeed(type) * config.speedMultiplier;
+      fireRate = Math.max(10, enemyFireRate(type) - game.wave * 2);
+      hp = Math.floor(enemyHp(type) * config.hpMultiplier);
+      color = enemyColor(type);
+      
+      // BOSS波最后一个敌人是BOSS
+      if (config.hasBoss && game.enemiesSpawned >= game.totalEnemies - 1 && !game.bossTank) {
+        type = 5;
+        speed = enemySpeed(type);
+        fireRate = enemyFireRate(type);
+        hp = bossHp(5); // mini-BOSS血量
+        color = enemyColor(type);
+      }
+    } else {
+      // 经典模式
+      // 检查是否是BOSS关卡且BOSS尚未生成
+      if (game.bossActive && !game.bossTank && game.enemiesSpawned >= game.totalEnemies - 1) {
+        type = 5;
+        speed = enemySpeed(type);
+        fireRate = enemyFireRate(type);
+        hp = bossHp(game.level);
+        color = enemyColor(type);
+      } else {
+        type = getEnemyType(game.level);
+        speed = enemySpeed(type);
+        fireRate = enemyFireRate(type);
+        hp = enemyHp(type);
+        color = enemyColor(type);
+      }
+    }
+    
     const e = new Tank(
       sp[0] * TILE, sp[1] * TILE,
       DIR.DOWN, false,
-      enemySpeed(type), enemyFireRate(type),
-      enemyColor(type), enemyHp(type)
+      speed, fireRate,
+      color, hp
     );
     e.type = type;
+    
+    // 如果是BOSS，保存引用
+    if (type === 5) {
+      game.bossTank = e;
+    }
+    
     spawnExplosion(e.x + TILE / 2, e.y + TILE / 2, 'medium');
     game.enemies.push(e);
     game.enemiesSpawned++;
@@ -351,8 +431,7 @@ export function useGame() {
   }
 
   function loadLevel(level: number) {
-    const lvl = LEVELS[(level - 1) % LEVELS.length];
-    game.map = lvl.map(row => [...row]);
+    game.map = getLevelMap(level);
     game.totalEnemies = levelEnemyCount(level);
     game.enemiesSpawned = 0;
     game.enemies = [];
@@ -362,6 +441,10 @@ export function useGame() {
     game.spawnCooldown = 120;
     game.enemiesLeft = game.totalEnemies;
     game.maxEnemiesOnScreen = Math.min(4 + Math.floor(level / 2), 7);
+    
+    // BOSS关卡处理
+    game.bossActive = isBossLevel(level);
+    game.bossTank = null;
 
     spawnPlayer();
   }
@@ -372,6 +455,20 @@ export function useGame() {
     enemy.fireCooldown = Math.max(0, enemy.fireCooldown - 1);
     enemy.aiTimer++;
     enemy.moving = false;
+
+    // 炮台(type===4)不移动，只射击
+    if (enemy.type === 4) {
+      enemy.aiShootTimer++;
+      const shootInterval = 30 + Math.floor(Math.random() * 40);
+      if (enemy.aiShootTimer >= shootInterval) {
+        enemy.aiShootTimer = 0;
+        if (Math.random() < 0.7) {
+          const b = enemy.shoot();
+          if (b) game.bullets.push(b);
+        }
+      }
+      return;
+    }
 
     const changeDirInterval = 80 + Math.floor(Math.random() * 60);
     if (enemy.aiTimer % changeDirInterval === 0) {
@@ -402,9 +499,34 @@ export function useGame() {
     if (enemy.aiShootTimer >= shootInterval) {
       enemy.aiShootTimer = 0;
       if (Math.random() < 0.6) {
-        const b = enemy.shoot();
-        if (b) game.bullets.push(b);
+        // BOSS射击模式：散射3颗子弹
+        if (enemy.type === 5) {
+          shootBossBullets(enemy);
+        } else {
+          const b = enemy.shoot();
+          if (b) game.bullets.push(b);
+        }
       }
+    }
+  }
+  
+  function shootBossBullets(enemy: Tank) {
+    // BOSS散射3颗子弹：正前方 + 左偏15度 + 右偏15度
+    const baseDir = enemy.dir;
+    const directions = [
+      baseDir,
+      (baseDir + 3) % 4, // 左偏（逆时针）
+      (baseDir + 1) % 4  // 右偏（顺时针）
+    ];
+    
+    for (const dir of directions) {
+      const cx = enemy.x + TILE / 2;
+      const cy = enemy.y + TILE / 2;
+      const speed = 5;
+      const bx = cx + DX[dir] * (TILE / 2 + 2) - 3;
+      const by = cy + DY[dir] * (TILE / 2 + 2) - 3;
+      const b = new Bullet(bx, by, dir, speed, false, '#ff6644');
+      game.bullets.push(b);
     }
   }
 
@@ -445,12 +567,27 @@ export function useGame() {
             if (e.hp <= 0) {
               e.alive = false;
               spawnExplosion(e.x + TILE / 2, e.y + TILE / 2, 'big');
+              
+              // BOSS击杀处理
+              if (e.type === 5) {
+                game.score += 1000; // BOSS额外得分
+                game.bossActive = false;
+                game.bossTank = null;
+                // 大爆炸效果
+                spawnExplosion(e.x + TILE / 2 - 20, e.y + TILE / 2 - 20, 'big');
+                spawnExplosion(e.x + TILE / 2 + 20, e.y + TILE / 2 + 20, 'big');
+              }
+              
               game.score += [100, 200, 300, 400][e.type] || 100;
               game.kills++;
               game.enemiesLeft--;
               if (Math.random() < 0.25) spawnPowerup(e.col, e.row);
-              if (game.enemiesLeft <= 0 && game.enemiesSpawned >= game.totalEnemies) {
-                setTimeout(() => nextLevel(), 1500);
+              
+              // 检查关卡/波次完成
+              if (game.mode === 'classic') {
+                if (game.enemiesLeft <= 0 && game.enemiesSpawned >= game.totalEnemies) {
+                  setTimeout(() => nextLevel(), 1500);
+                }
               }
             } else {
               spawnExplosion(e.x + TILE / 2, e.y + TILE / 2, 'small');
@@ -469,6 +606,15 @@ export function useGame() {
             game.playerLives--;
             spawnExplosion(game.player.x + TILE / 2, game.player.y + TILE / 2, 'big');
             game.player.alive = false;
+            
+            // 生存模式：记录最高分
+            if (game.mode === 'survival') {
+              if (game.score > game.highScore) {
+                localStorage.setItem('tankHighScore', game.score.toString());
+                game.highScore = game.score;
+              }
+            }
+            
             if (game.playerLives <= 0) {
               setTimeout(() => endGame(false), 800);
             } else {
@@ -584,6 +730,17 @@ export function useGame() {
 
   function update() {
     if (!game.running || game.paused || game.over) return;
+    
+    // 处理波次过渡
+    if (game.mode === 'survival' && game.waveTransition) {
+      game.waveTransitionTimer--;
+      if (game.waveTransitionTimer <= 0) {
+        game.waveTransition = false;
+      }
+      game.frame++;
+      return; // 过渡期间暂停游戏逻辑
+    }
+    
     game.frame++;
 
     if (game.shieldTimer > 0) game.shieldTimer--;
@@ -627,6 +784,11 @@ export function useGame() {
     game.bullets = game.bullets.filter(b => b.alive);
     game.explosions = game.explosions.filter(e => e.alive);
     game.powerups = game.powerups.filter(p => p.alive);
+    
+    // 生存模式：检查波次完成
+    if (game.mode === 'survival' && game.enemiesLeft <= 0 && game.enemies.filter(e => e.alive).length === 0) {
+      startNextWave();
+    }
   }
 
   // Drawing functions
@@ -946,6 +1108,39 @@ export function useGame() {
       if (ex.alive) drawExplosion(c, ex);
     }
 
+    // BOSS血条
+    if (game.bossActive && game.bossTank && game.bossTank.alive) {
+      const bx = 50, by = 10, bw = W - 100, bh = 20;
+      const maxHp = game.bossTank.maxHp || bossHp(game.level);
+      const ratio = game.bossTank.hp / maxHp;
+      c.fillStyle = '#333';
+      c.fillRect(bx, by, bw, bh);
+      c.fillStyle = ratio > 0.5 ? '#00ff00' : ratio > 0.25 ? '#ffaa00' : '#ff0000';
+      c.fillRect(bx, by, bw * ratio, bh);
+      c.strokeStyle = '#fff';
+      c.lineWidth = 2;
+      c.strokeRect(bx, by, bw, bh);
+      c.fillStyle = '#fff';
+      c.font = 'bold 14px monospace';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.fillText('BOSS', W / 2, by + 10);
+    }
+    
+    // 波次过渡文字
+    if (game.mode === 'survival' && game.waveTransition) {
+      c.fillStyle = 'rgba(0,0,0,0.7)';
+      c.fillRect(0, 0, W, H);
+      c.fillStyle = '#ffd700';
+      c.font = 'bold 48px monospace';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.fillText(`第 ${game.wave} 波`, W / 2, H / 2);
+      c.font = '20px monospace';
+      c.fillStyle = '#ffffff';
+      c.fillText('准备迎战!', W / 2, H / 2 + 40);
+    }
+
     if (game.paused) {
       c.fillStyle = 'rgba(0,0,0,0.5)';
       c.fillRect(0, 0, W, H);
@@ -964,18 +1159,72 @@ export function useGame() {
     animationId = requestAnimationFrame(gameLoop);
   }
 
-  function startGame() {
+  function startGame(mode: GameMode = 'classic') {
     const s = initState();
     Object.assign(game, s);
+    game.mode = mode;
     game.running = true;
-    loadLevel(1);
+    
+    if (mode === 'survival') {
+      startSurvival();
+    } else {
+      loadLevel(1);
+    }
+    
     canvasRef.value?.focus();
     gameLoop();
   }
+  
+  function startSurvival() {
+    // 初始化生存模式状态
+    game.mode = 'survival';
+    game.wave = 0;
+    game.highScore = parseInt(localStorage.getItem('tankHighScore') || '0');
+    game.map = getSurvivalMap();
+    // 重置玩家、敌人等
+    spawnPlayer();
+    startNextWave();
+  }
+  
+  function startNextWave() {
+    game.wave++;
+    const config = getWaveConfig(game.wave);
+    game.waveEnemiesLeft = config.enemyCount;
+    game.totalEnemies = config.enemyCount;
+    game.enemiesSpawned = 0;
+    game.enemiesLeft = config.enemyCount;
+    game.bossTank = null;
+    
+    // 如果是BOSS波（每5波），标记 bossActive
+    if (config.hasBoss) {
+      game.bossActive = true;
+    } else {
+      game.bossActive = false;
+    }
+    
+    // 波次过渡动画
+    game.waveTransition = true;
+    game.waveTransitionTimer = 120; // 2秒显示 "第 X 波"
+    
+    // 每5波重新生成地图（修复被破坏的砖墙）
+    if (game.wave % 5 === 1 && game.wave > 1) {
+      game.map = getSurvivalMap();
+    }
+  }
 
   function nextLevel() {
-    game.level++;
-    loadLevel(game.level);
+    if (game.mode === 'classic') {
+      // 经典模式：15关通关
+      if (game.level >= 15) {
+        game.win = true;
+        game.over = true;
+        game.running = false;
+        if (animationId) cancelAnimationFrame(animationId);
+        return;
+      }
+      game.level++;
+      loadLevel(game.level);
+    }
   }
 
   function endGame(win: boolean) {

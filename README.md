@@ -1,5 +1,107 @@
-# Vue 3 + TypeScript + Vite
+# 坦克大战 (Tank Battle)
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+一个基于 Vue 3 + TypeScript + Vite 开发的经典坦克大战游戏，支持经典闯关模式和无尽生存模式。
 
-Learn more about the recommended Project Setup and IDE Support in the [Vue Docs TypeScript Guide](https://vuejs.org/guide/typescript/overview.html#project-setup).
+## 游戏特色
+
+### 双模式游戏系统
+- **经典闯关模式**：15个精心设计的关卡，每5关设有BOSS战
+- **无尽生存模式**：无限波次挑战，难度逐步提升，争夺最高分
+
+### 丰富的游戏内容
+- 5种不同类型的敌人坦克（轻型、重型、快速、炮台、BOSS）
+- 4种道具系统：护盾、快速射击、额外生命、全屏炸弹
+- 多种地形元素：砖墙、钢墙、水域、森林、基地
+- 动态地图生成算法
+
+### 操作方式
+| 按键 | 功能 |
+|------|------|
+| `W/A/S/D` 或 `↑/↓/←/→` | 移动坦克 |
+| `Space` | 射击 |
+| `P` | 暂停/继续 |
+
+## 技术栈
+
+- **框架**: Vue 3 (Composition API + `<script setup>`)
+- **语言**: TypeScript
+- **构建工具**: Vite
+- **样式**: Tailwind CSS
+- **渲染**: HTML5 Canvas
+
+## 快速开始
+
+### 安装依赖
+```bash
+npm install
+```
+
+### 开发模式
+```bash
+npm run dev
+```
+
+### 构建生产版本
+```bash
+npm run build
+```
+
+### 预览生产构建
+```bash
+npm run preview
+```
+
+## 项目结构
+
+```
+src/
+├── components/        # Vue 组件
+│   └── HelloWorld.vue
+├── composables/       # 组合式函数
+│   └── useGame.ts     # 游戏核心逻辑
+├── types/             # TypeScript 类型定义
+│   └── game.ts        # 游戏相关类型和常量
+├── App.vue            # 主应用组件
+├── main.ts            # 入口文件
+└── style.css          # 全局样式
+```
+
+## 游戏机制
+
+### 敌人坦克类型
+| 类型 | 颜色 | 特点 |
+|------|------|------|
+| 基础型 | 黄色 | 速度慢，血量低 |
+| 快速型 | 红色 | 速度快，血量低 |
+| 重型 | 绿色 | 速度中等，血量中等 |
+| 精英 | 紫色 | 速度快，血量高 |
+| 炮台 | 红色 | 不移动，高射速 |
+| BOSS | 粉色 | 散射子弹，高血量 |
+
+### 道具系统
+- **护盾** 🛡️：短时间内无敌
+- **快速射击** ⚡：大幅提升射击速度
+- **额外生命** ❤️：增加一条生命
+- **全屏炸弹** 💣：消灭所有敌人
+
+### 计分规则
+- 基础型：100分
+- 快速型：200分
+- 重型：300分
+- 精英/炮台：400分
+- BOSS：1000分 + 类型分数
+
+## 开发计划
+
+- [x] 基础游戏框架
+- [x] 双模式系统（经典/生存）
+- [x] 道具系统
+- [x] BOSS战
+- [x] 本地最高分记录
+- [ ] 音效系统
+- [ ] 多人对战模式
+- [ ] 移动端适配
+
+## 许可证
+
+MIT License

@@ -231,3 +231,208 @@ body {
   transition: opacity 0.4s;
   border: 1px solid #ffd700;
 }
+
+/* ==================== 模式选择界面样式 ==================== */
+
+.mode-select {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  align-items: stretch;
+  margin-bottom: 20px;
+}
+
+.mode-card {
+  width: 220px;
+  padding: 24px 20px;
+  background: rgba(22, 33, 62, 0.95);
+  border: 2px solid;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.mode-card:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 30px rgba(0, 255, 136, 0.4);
+}
+
+.mode-card h3 {
+  font-size: 22px;
+  font-weight: bold;
+  margin-bottom: 12px;
+  letter-spacing: 2px;
+}
+
+.mode-card p {
+  font-size: 13px;
+  color: #8899aa;
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+/* 经典模式 - 绿色主题 */
+.mode-classic {
+  border-color: #00ff88;
+}
+
+.mode-classic h3 {
+  color: #00ff88;
+  text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+}
+
+.mode-classic:hover {
+  box-shadow: 0 0 30px rgba(0, 255, 136, 0.6);
+  background: rgba(0, 255, 136, 0.1);
+}
+
+/* 生存模式 - 红/橙色主题 */
+.mode-survival {
+  border-color: #ff6644;
+}
+
+.mode-survival h3 {
+  color: #ff6644;
+  text-shadow: 0 0 10px rgba(255, 102, 68, 0.5);
+}
+
+.mode-survival:hover {
+  box-shadow: 0 0 30px rgba(255, 102, 68, 0.6);
+  background: rgba(255, 102, 68, 0.1);
+}
+
+/* 最高分显示 */
+.high-score {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 215, 0, 0.3);
+  font-size: 14px;
+  color: #ffd700;
+  font-weight: bold;
+}
+
+/* ==================== BOSS关卡标识样式 ==================== */
+
+.boss-indicator {
+  margin-top: 10px;
+  padding: 6px 12px;
+  background: rgba(255, 68, 68, 0.2);
+  border: 1px solid #ff4444;
+  border-radius: 4px;
+  color: #ff4444;
+  font-size: 12px;
+  font-weight: bold;
+  text-align: center;
+  letter-spacing: 2px;
+  animation: boss-blink 1s ease-in-out infinite;
+}
+
+@keyframes boss-blink {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 10px rgba(255, 68, 68, 0.4);
+  }
+  50% {
+    opacity: 0.7;
+    box-shadow: 0 0 20px rgba(255, 68, 68, 0.8);
+  }
+}
+
+/* ==================== 波次信息样式 ==================== */
+
+.wave-value {
+  color: #ff8844 !important;
+}
+
+.high-score-value {
+  color: #ffd700 !important;
+}
+
+.wave-transition-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  pointer-events: none;
+}
+
+.wave-info {
+  text-align: center;
+  animation: wave-pulse 0.5s ease-out;
+}
+
+.wave-number {
+  font-size: 48px;
+  color: #ffd700;
+  font-weight: bold;
+  text-shadow: 0 0 30px #ffd700;
+  letter-spacing: 4px;
+  margin-bottom: 16px;
+}
+
+.wave-hint {
+  font-size: 20px;
+  color: #ffffff;
+  letter-spacing: 2px;
+}
+
+@keyframes wave-pulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ==================== 新纪录标识 ==================== */
+
+.new-record {
+  margin-top: 8px;
+  font-size: 18px;
+  color: #ffd700;
+  font-weight: bold;
+  text-shadow: 0 0 15px #ffd700;
+  animation: record-blink 0.8s ease-in-out infinite;
+}
+
+@keyframes record-blink {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+/* ==================== 游戏结束界面增强 ==================== */
+
+.game-over-survival {
+  background: linear-gradient(135deg, rgba(255, 102, 68, 0.1), rgba(255, 68, 68, 0.1));
+  border: 2px solid #ff6644;
+}
+
+.btn-secondary {
+  background: linear-gradient(135deg, #667788, #445566) !important;
+  box-shadow: 0 0 20px rgba(102, 119, 136, 0.4) !important;
+}
+
+.btn-secondary:hover {
+  box-shadow: 0 0 30px rgba(102, 119, 136, 0.7) !important;
+}
