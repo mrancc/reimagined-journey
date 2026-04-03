@@ -304,6 +304,27 @@ body {
   background: rgba(255, 102, 68, 0.1);
 }
 
+/* 乱斗模式 - 紫色/金色主题 */
+.mode-brawl {
+  border-color: #a855f7;
+  background: linear-gradient(135deg, rgba(107, 33, 168, 0.95), rgba(168, 85, 247, 0.85));
+}
+
+.mode-brawl h3 {
+  color: #fbbf24;
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.6);
+}
+
+.mode-brawl p {
+  color: #e9d5ff;
+}
+
+.mode-brawl:hover {
+  box-shadow: 0 0 30px rgba(168, 85, 247, 0.7);
+  background: linear-gradient(135deg, rgba(107, 33, 168, 1), rgba(168, 85, 247, 0.95));
+  transform: scale(1.05);
+}
+
 /* 最高分显示 */
 .high-score {
   margin-top: 12px;
@@ -435,4 +456,98 @@ body {
 
 .btn-secondary:hover {
   box-shadow: 0 0 30px rgba(102, 119, 136, 0.7) !important;
+}
+
+/* ==================== 乱斗模式技能面板样式 ==================== */
+
+.brawl-skills-panel {
+  background: rgba(107, 33, 168, 0.15);
+  border-color: #a855f7;
+}
+
+.brawl-skills-panel .panel-title {
+  color: #fbbf24;
+  border-bottom-color: #a855f7;
+}
+
+.skills-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skill-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.skill-icon {
+  font-size: 14px;
+  width: 18px;
+  text-align: center;
+}
+
+.skill-name {
+  color: #e9d5ff;
+  width: 60px;
+  flex-shrink: 0;
+}
+
+.skill-bar {
+  flex: 1;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.skill-progress {
+  height: 100%;
+  background: linear-gradient(90deg, #ff6600, #ff8800);
+  border-radius: 4px;
+  transition: width 0.1s linear;
+}
+
+.skill-progress.shield {
+  background: linear-gradient(90deg, #00aaff, #00ccff);
+}
+
+.skill-progress.speed {
+  background: linear-gradient(90deg, #00ff88, #00ffaa);
+}
+
+.mine-count {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 8px;
+  background: rgba(255, 68, 68, 0.15);
+  border: 1px solid rgba(255, 68, 68, 0.4);
+  border-radius: 6px;
+}
+
+.mine-icon {
+  font-size: 16px;
+}
+
+.mine-text {
+  color: #ff4444;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.mine-hint {
+  text-align: center;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #8899aa;
+}
+
+.mine-hint .ctrl-key {
+  background: #a855f7;
+  color: #fff;
 }

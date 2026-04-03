@@ -1,10 +1,11 @@
 import { ref, reactive, onMounted, onUnmounted } from 'vue';
-import type { PowerupType, GameMode } from '../types/game';
+import type { PowerupType, GameMode, BrawlPowerupType } from '../types/game';
 import {
-  TILE, COLS, ROWS, W, H,
+  TILE, COLS, ROWS,
   DIR, DX, DY,
   TILE_EMPTY, TILE_BRICK, TILE_STEEL, TILE_WATER, TILE_FOREST, TILE_BASE,
-  POWERUP_TYPES, levelEnemyCount, enemySpeed, enemyFireRate, enemyHp,
+  POWERUP_TYPES, BRAWL_POWERUP_TYPES, BRAWL_COLS, BRAWL_ROWS,
+  levelEnemyCount, enemySpeed, enemyFireRate, enemyHp,
   enemyColor, getEnemyType, rectsOverlap,
   getLevelMap, getSurvivalMap, getWaveConfig, isBossLevel, bossHp
 } from '../types/game';
@@ -62,7 +63,9 @@ class Tank {
     return { x: this.x + pad, y: this.y + pad, w: TILE - pad * 2, h: TILE - pad * 2 };
   }
 
-  canMoveTo(nx: number, ny: number, map: number[][]): boolean {
+  canMoveTo(nx: number, ny: number, map: number[][], mapCols?: number, mapRows?: number): boolean {
+    const mCols = mapCols ?? COLS;
+    const mRows = mapRows ?? ROWS;
     const pad = 4;
     const corners = [
       { x: nx + pad, y: ny + pad },
@@ -73,14 +76,14 @@ class Tank {
     for (const c of corners) {
       const col = Math.floor(c.x / TILE);
       const row = Math.floor(c.y / TILE);
-      if (col < 0 || row < 0 || col >= COLS || row >= ROWS) return false;
+      if (col < 0 || row < 0 || col >= mCols || row >= mRows) return false;
       const t = map[row][col];
       if (t === TILE_BRICK || t === TILE_STEEL || t === TILE_WATER || t === TILE_BASE) return false;
     }
     return true;
   }
 
-  tryMove(dx: number, dy: number, map: number[][]): boolean {
+  tryMove(dx: number, dy: number, map: number[][], mapCols?: number, mapRows?: number): boolean {
     const nx = this.x + dx;
     const ny = this.y + dy;
     const snap = 4;
@@ -101,7 +104,7 @@ class Tank {
       }
     }
 
-    if (this.canMoveTo(snx, sny, map)) {
+    if (this.canMoveTo(snx, sny, map, mapCols, mapRows)) {
       this.x = snx;
       this.y = sny;
       return true;
@@ -147,8 +150,10 @@ class Bullet {
   alive: boolean;
   w: number;
   h: number;
+  piercing: boolean;
+  hitEnemies: Set<Tank>;
 
-  constructor(x: number, y: number, dir: number, speed: number, friendly: boolean, color: string) {
+  constructor(x: number, y: number, dir: number, speed: number, friendly: boolean, color: string, piercing = false) {
     this.x = x;
     this.y = y;
     this.dir = dir;
@@ -158,12 +163,14 @@ class Bullet {
     this.alive = true;
     this.w = 6;
     this.h = 6;
+    this.piercing = piercing;
+    this.hitEnemies = new Set<Tank>();
   }
 
-  update() {
+  update(canvasW: number, canvasH: number) {
     this.x += DX[this.dir] * this.speed;
     this.y += DY[this.dir] * this.speed;
-    if (this.x < 0 || this.y < 0 || this.x > W || this.y > H) {
+    if (this.x < 0 || this.y < 0 || this.x > canvasW || this.y > canvasH) {
       this.alive = false;
     }
   }
@@ -222,6 +229,32 @@ class Powerup {
   }
 }
 
+class Mine {
+  x: number;
+  y: number;
+  gridX: number;
+  gridY: number;
+  alive: boolean;
+  timer: number;
+  pulse: number;
+
+  constructor(gridX: number, gridY: number) {
+    this.gridX = gridX;
+    this.gridY = gridY;
+    this.x = gridX * TILE + TILE / 2;
+    this.y = gridY * TILE + TILE / 2;
+    this.alive = true;
+    this.timer = 900;
+    this.pulse = 1;
+  }
+
+  update() {
+    this.timer--;
+    this.pulse = 0.6 + Math.sin(this.timer * 0.1) * 0.4;
+    if (this.timer <= 0) this.alive = false;
+  }
+}
+
 // ============================================================
 // GAME STATE
 // ============================================================
@@ -259,6 +292,18 @@ export interface GameState {
   waveTransitionTimer: number; // 波次过渡显示时间
   bossActive: boolean;     // 当前是否有BOSS
   bossTank: Tank | null;   // BOSS坦克引用（用于UI血条显示）
+  // 乱斗模式专属
+  doubleShotTimer: number;
+  tripleShotTimer: number;
+  pierceTimer: number;
+  speedBoostTimer: number;
+  mineCount: number;
+  mines: Mine[];
+  airstrikeActive: boolean;
+  airstrikeY: number;
+  airstrikeTargets: { x: number; y: number }[];
+  brawlHighScore: number;
+  playerBaseSpeed: number; // 用于速度加成恢复
 }
 
 export function useGame() {
@@ -298,6 +343,18 @@ export function useGame() {
     waveTransitionTimer: 0,
     bossActive: false,
     bossTank: null,
+    // 乱斗模式字段
+    doubleShotTimer: 0,
+    tripleShotTimer: 0,
+    pierceTimer: 0,
+    speedBoostTimer: 0,
+    mineCount: 0,
+    mines: [],
+    airstrikeActive: false,
+    airstrikeY: -TILE,
+    airstrikeTargets: [],
+    brawlHighScore: 0,
+    playerBaseSpeed: 2.5,
   });
 
   const keys = reactive<{ [key: string]: boolean }>({});
@@ -350,6 +407,18 @@ export function useGame() {
       waveTransitionTimer: 0,
       bossActive: false,
       bossTank: null,
+      // 乱斗模式字段
+      doubleShotTimer: 0,
+      tripleShotTimer: 0,
+      pierceTimer: 0,
+      speedBoostTimer: 0,
+      mineCount: 0,
+      mines: [],
+      airstrikeActive: false,
+      airstrikeY: -TILE,
+      airstrikeTargets: [],
+      brawlHighScore: parseInt(localStorage.getItem('brawlHighScore') || '0'),
+      playerBaseSpeed: 2.5,
     };
   }
 
@@ -357,13 +426,89 @@ export function useGame() {
     game.explosions.push(new Explosion(x, y, size));
   }
 
+  // 辅助函数：根据当前模式返回地图尺寸
+  function getCols(): number {
+    return game.mode === 'brawl' ? BRAWL_COLS : COLS;
+  }
+
+  function getRows(): number {
+    return game.mode === 'brawl' ? BRAWL_ROWS : ROWS;
+  }
+
+  // 生成乱斗模式地图 (17x17)
+  function generateBrawlMap(): number[][] {
+    const map: number[][] = Array(BRAWL_ROWS).fill(null).map(() => Array(BRAWL_COLS).fill(TILE_EMPTY));
+    const cx = Math.floor(BRAWL_COLS / 2);
+    const cy = Math.floor(BRAWL_ROWS / 2);
+
+    // 玩家出生点（底部中央）
+    const playerSpawnX = cx;
+    const playerSpawnY = BRAWL_ROWS - 1;
+
+    // 敌人出生点（顶部三个位置）
+    const enemySpawns = [[2, 0], [cx, 0], [BRAWL_COLS - 3, 0]];
+
+    // 对称障碍物：左右对称放置
+    const halfCols = Math.floor(BRAWL_COLS / 2);
+
+    for (let y = 1; y < BRAWL_ROWS - 1; y++) {
+      for (let x = 0; x < halfCols; x++) {
+        // 跳过玩家出生点附近
+        if (Math.abs(x - playerSpawnX) <= 2 && Math.abs(y - playerSpawnY) <= 2) continue;
+        // 跳过敌人出生点附近
+        let near = false;
+        for (const [ex, ey] of enemySpawns) {
+          if (Math.abs(x - ex) <= 1 && Math.abs(y - ey) <= 2) { near = true; break; }
+        }
+        if (near) continue;
+        // 中间区域减少障碍（技能发挥空间）
+        if (Math.abs(y - cy) <= 2 && Math.abs(x - cx) <= 4) continue;
+
+        const rand = Math.random();
+        let tile = TILE_EMPTY;
+        if (rand < 0.06) tile = TILE_STEEL;
+        else if (rand < 0.10) tile = TILE_WATER;
+        else if (rand < 0.15) tile = TILE_FOREST;
+        else if (rand < 0.35) tile = TILE_BRICK;
+
+        if (tile !== TILE_EMPTY) {
+          map[y][x] = tile;
+          // 左右镜像
+          map[y][BRAWL_COLS - 1 - x] = tile;
+        }
+      }
+    }
+    // 确保中间列清空通道
+    for (let y = 0; y < BRAWL_ROWS; y++) {
+      map[y][cx] = TILE_EMPTY;
+    }
+    // 确保玩家出生点及周围空旷
+    for (let dy = -1; dy <= 0; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const px = playerSpawnX + dx;
+        const py = playerSpawnY + dy;
+        if (py >= 0 && py < BRAWL_ROWS && px >= 0 && px < BRAWL_COLS) {
+          map[py][px] = TILE_EMPTY;
+        }
+      }
+    }
+    return map;
+  }
+
   function spawnEnemy() {
     if (game.mode === 'classic') {
       if (game.enemiesSpawned >= game.totalEnemies) return;
     }
+    if (game.mode === 'survival' || game.mode === 'brawl') {
+      if (game.enemiesSpawned >= game.totalEnemies) return;
+    }
     if (game.enemies.filter(e => e.alive).length >= game.maxEnemiesOnScreen) return;
 
-    const spawns = [[0, 0], [6, 0], [12, 0]] as [number, number][];
+    const cols = getCols();
+    const cx = Math.floor(cols / 2);
+    const spawns: [number, number][] = game.mode === 'brawl'
+      ? [[2, 0], [cx, 0], [cols - 3, 0]]
+      : [[0, 0], [6, 0], [12, 0]];
     const sp = spawns[game.enemiesSpawned % 3];
     
     let type: number;
@@ -389,6 +534,31 @@ export function useGame() {
         hp = bossHp(5); // mini-BOSS血量
         color = enemyColor(type);
       }
+    } else if (game.mode === 'brawl') {
+      // 乱斗模式：使用波次配置，但适配乱斗
+      const enemyCount = Math.min(8 + game.wave * 2, 25);
+      const speedMult = 1 + game.wave * 0.05;
+      const hpMult = 1 + Math.floor(game.wave / 3) * 0.5;
+      let enemyTypes: number[];
+      if (game.wave <= 3) enemyTypes = [0, 1];
+      else if (game.wave <= 6) enemyTypes = [0, 1, 2];
+      else if (game.wave <= 10) enemyTypes = [1, 2, 3];
+      else enemyTypes = [2, 3, 4];
+      type = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+      speed = enemySpeed(type) * speedMult;
+      fireRate = Math.max(10, enemyFireRate(type) - game.wave * 2);
+      hp = Math.floor(enemyHp(type) * hpMult);
+      color = enemyColor(type);
+      // 每5波出BOSS
+      const hasBoss = game.wave % 5 === 0;
+      if (hasBoss && game.enemiesSpawned >= game.totalEnemies - 1 && !game.bossTank) {
+        type = 5;
+        speed = enemySpeed(type);
+        fireRate = enemyFireRate(type);
+        hp = bossHp(5);
+        color = enemyColor(type);
+      }
+      void enemyCount; // suppress unused warning
     } else {
       // 经典模式
       // 检查是否是BOSS关卡且BOSS尚未生成
@@ -487,7 +657,7 @@ export function useGame() {
     }
 
     enemy.dir = enemy.aiDir;
-    const moved = enemy.tryMove(DX[enemy.dir] * enemy.speed, DY[enemy.dir] * enemy.speed, game.map);
+    const moved = enemy.tryMove(DX[enemy.dir] * enemy.speed, DY[enemy.dir] * enemy.speed, game.map, getCols(), getRows());
     if (moved) {
       enemy.moving = true;
     } else {
@@ -530,7 +700,56 @@ export function useGame() {
     }
   }
 
+  function shootBrawl(player: Tank) {
+    const piercing = game.pierceTimer > 0;
+    // 优先级：三向 > 双发 > 普通
+    if (game.tripleShotTimer > 0) {
+      // 三向散射
+      const dirs = [player.dir, (player.dir + 3) % 4, (player.dir + 1) % 4];
+      for (const dir of dirs) {
+        const cx = player.x + TILE / 2;
+        const cy = player.y + TILE / 2;
+        const bx = cx + DX[dir] * (TILE / 2 + 2) - 3;
+        const by = cy + DY[dir] * (TILE / 2 + 2) - 3;
+        if (player.fireCooldown <= 0) {
+          const b = new Bullet(bx, by, dir, 7, true, '#ff44ff', piercing);
+          game.bullets.push(b);
+        }
+      }
+      if (player.fireCooldown <= 0) player.fireCooldown = player.fireRate;
+    } else if (game.doubleShotTimer > 0) {
+      // 双发：正前方 + 垂直偏移8px的第二颗
+      if (player.fireCooldown <= 0) {
+        const cx = player.x + TILE / 2;
+        const cy = player.y + TILE / 2;
+        const bx1 = cx + DX[player.dir] * (TILE / 2 + 2) - 3;
+        const by1 = cy + DY[player.dir] * (TILE / 2 + 2) - 3;
+        const b1 = new Bullet(bx1, by1, player.dir, 7, true, '#ff8800', piercing);
+        game.bullets.push(b1);
+        // 第二颗：垂直偏移
+        const perpX = player.dir === DIR.UP || player.dir === DIR.DOWN ? 8 : 0;
+        const perpY = player.dir === DIR.LEFT || player.dir === DIR.RIGHT ? 8 : 0;
+        const b2 = new Bullet(bx1 + perpX, by1 + perpY, player.dir, 7, true, '#ff8800', piercing);
+        game.bullets.push(b2);
+        player.fireCooldown = player.fireRate;
+      }
+    } else {
+      // 普通射击（可能带穿透）
+      if (player.fireCooldown <= 0) {
+        const cx = player.x + TILE / 2;
+        const cy = player.y + TILE / 2;
+        const bx = cx + DX[player.dir] * (TILE / 2 + 2) - 3;
+        const by = cy + DY[player.dir] * (TILE / 2 + 2) - 3;
+        const b = new Bullet(bx, by, player.dir, 7, true, piercing ? '#00ffcc' : '#00ff88', piercing);
+        game.bullets.push(b);
+        player.fireCooldown = player.fireRate;
+      }
+    }
+  }
+
   function checkBulletCollisions() {
+    const curCols = getCols();
+    const curRows = getRows();
     for (const b of game.bullets) {
       if (!b.alive) continue;
 
@@ -538,7 +757,7 @@ export function useGame() {
       const col = Math.floor((b.x + 3) / TILE);
       const row = Math.floor((b.y + 3) / TILE);
 
-      if (col >= 0 && row >= 0 && col < COLS && row < ROWS) {
+      if (col >= 0 && row >= 0 && col < curCols && row < curRows) {
         const t = game.map[row][col];
         if (t === TILE_BRICK) {
           game.map[row][col] = TILE_EMPTY;
@@ -561,8 +780,10 @@ export function useGame() {
       if (b.friendly) {
         for (const e of game.enemies) {
           if (!e.alive) continue;
+          if (b.piercing && b.hitEnemies.has(e)) continue;
           if (rectsOverlap(br, e.getRect())) {
-            b.alive = false;
+            if (!b.piercing) b.alive = false;
+            else b.hitEnemies.add(e);
             e.hp--;
             if (e.hp <= 0) {
               e.alive = false;
@@ -581,7 +802,10 @@ export function useGame() {
               game.score += [100, 200, 300, 400][e.type] || 100;
               game.kills++;
               game.enemiesLeft--;
-              if (Math.random() < 0.25) spawnPowerup(e.col, e.row);
+              
+              // 道具掉落：乱斗模式60%，普通25%
+              const dropRate = game.mode === 'brawl' ? 0.6 : 0.25;
+              if (Math.random() < dropRate) spawnPowerup(e.col, e.row);
               
               // 检查关卡/波次完成
               if (game.mode === 'classic') {
@@ -592,7 +816,7 @@ export function useGame() {
             } else {
               spawnExplosion(e.x + TILE / 2, e.y + TILE / 2, 'small');
             }
-            break;
+            if (!b.piercing) break;
           }
         }
       }
@@ -607,11 +831,17 @@ export function useGame() {
             spawnExplosion(game.player.x + TILE / 2, game.player.y + TILE / 2, 'big');
             game.player.alive = false;
             
-            // 生存模式：记录最高分
+            // 生存/乱斗模式：记录最高分
             if (game.mode === 'survival') {
               if (game.score > game.highScore) {
                 localStorage.setItem('tankHighScore', game.score.toString());
                 game.highScore = game.score;
+              }
+            }
+            if (game.mode === 'brawl') {
+              if (game.score > game.brawlHighScore) {
+                localStorage.setItem('brawlHighScore', game.score.toString());
+                game.brawlHighScore = game.score;
               }
             }
             
@@ -636,17 +866,85 @@ export function useGame() {
   }
 
   function spawnPowerup(col: number, row: number) {
+    const curCols = getCols();
+    const curRows = getRows();
     let tries = 0;
     while (tries < 20) {
-      const c = Math.max(0, Math.min(COLS - 1, col + Math.floor(Math.random() * 5) - 2));
-      const r = Math.max(0, Math.min(ROWS - 1, row + Math.floor(Math.random() * 5) - 2));
+      const c = Math.max(0, Math.min(curCols - 1, col + Math.floor(Math.random() * 5) - 2));
+      const r = Math.max(0, Math.min(curRows - 1, row + Math.floor(Math.random() * 5) - 2));
       if (game.map[r][c] === TILE_EMPTY) {
-        const type = POWERUP_TYPES[Math.floor(Math.random() * POWERUP_TYPES.length)];
+        const type: PowerupType = game.mode === 'brawl'
+          ? BRAWL_POWERUP_TYPES[Math.floor(Math.random() * BRAWL_POWERUP_TYPES.length)]
+          : POWERUP_TYPES[Math.floor(Math.random() * POWERUP_TYPES.length)];
         game.powerups.push(new Powerup(c, r, type));
         return;
       }
       tries++;
     }
+  }
+
+  function spawnRandomBrawlPowerups() {
+    const curCols = getCols();
+    const curRows = getRows();
+    const count = 2 + Math.floor(Math.random() * 2); // 2-3个
+    let spawned = 0;
+    let tries = 0;
+    while (spawned < count && tries < 60) {
+      const c = Math.floor(Math.random() * curCols);
+      const r = Math.floor(Math.random() * curRows);
+      if (game.map[r][c] === TILE_EMPTY) {
+        const type: BrawlPowerupType = BRAWL_POWERUP_TYPES[Math.floor(Math.random() * BRAWL_POWERUP_TYPES.length)];
+        game.powerups.push(new Powerup(c, r, type));
+        spawned++;
+      }
+      tries++;
+    }
+  }
+
+  function checkMines() {
+    for (const mine of game.mines) {
+      if (!mine.alive) continue;
+      for (const e of game.enemies) {
+        if (!e.alive) continue;
+        const ex = e.x + TILE / 2;
+        const ey = e.y + TILE / 2;
+        const dist = Math.sqrt((ex - mine.x) ** 2 + (ey - mine.y) ** 2);
+        if (dist < TILE) {
+          // 触发爆炸
+          mine.alive = false;
+          spawnExplosion(mine.x, mine.y, 'big');
+          // 1.5 TILE 半径内所有敌人受伤
+          for (const e2 of game.enemies) {
+            if (!e2.alive) continue;
+            const ex2 = e2.x + TILE / 2;
+            const ey2 = e2.y + TILE / 2;
+            const d2 = Math.sqrt((ex2 - mine.x) ** 2 + (ey2 - mine.y) ** 2);
+            if (d2 < TILE * 1.5) {
+              if (e2.type === 5) {
+                e2.hp -= 3;
+                if (e2.hp <= 0) {
+                  e2.alive = false;
+                  spawnExplosion(e2.x + TILE / 2, e2.y + TILE / 2, 'big');
+                  game.score += 1000;
+                  game.bossActive = false;
+                  game.bossTank = null;
+                  game.kills++;
+                  game.enemiesLeft--;
+                }
+              } else {
+                e2.alive = false;
+                spawnExplosion(e2.x + TILE / 2, e2.y + TILE / 2, 'big');
+                game.score += [100, 200, 300, 400][e2.type] || 100;
+                game.kills++;
+                game.enemiesLeft--;
+              }
+            }
+          }
+          break;
+        }
+      }
+    }
+    game.mines = game.mines.filter(m => m.alive);
   }
 
   function checkPowerups() {
@@ -657,8 +955,61 @@ export function useGame() {
       const pr2 = { x: p.x, y: p.y, w: TILE, h: TILE };
       if (rectsOverlap(pr, pr2)) {
         p.alive = false;
-        applyPowerup(p.type);
+        if (game.mode === 'brawl') {
+          applyBrawlPowerup(p.type as BrawlPowerupType);
+        } else {
+          applyPowerup(p.type);
+        }
       }
+    }
+  }
+
+  function applyBrawlPowerup(type: BrawlPowerupType) {
+    switch (type) {
+      case 'doubleshot':
+        game.doubleShotTimer = 400;
+        break;
+      case 'tripleshot':
+        game.tripleShotTimer = 400;
+        break;
+      case 'pierce':
+        game.pierceTimer = 400;
+        break;
+      case 'shield':
+        game.shieldTimer = 500;
+        break;
+      case 'speedboost':
+        game.speedBoostTimer = 400;
+        if (game.player) {
+          game.playerBaseSpeed = game.player.speed;
+          game.player.speed = game.player.speed * 1.8;
+        }
+        break;
+      case 'mine':
+        game.mineCount += 3;
+        break;
+      case 'airstrike': {
+        // 随机选3-5个存活敌人为目标
+        const alive = game.enemies.filter(e => e.alive);
+        const count = Math.min(alive.length, 3 + Math.floor(Math.random() * 3));
+        const shuffled = alive.sort(() => Math.random() - 0.5).slice(0, count);
+        game.airstrikeTargets = shuffled.map(e => ({ x: e.x + TILE / 2, y: e.y + TILE / 2 }));
+        game.airstrikeActive = true;
+        game.airstrikeY = -TILE;
+        break;
+      }
+      case 'bomb':
+        // 复用bomb逻辑
+        for (const e of game.enemies) {
+          if (!e.alive) continue;
+          e.alive = false;
+          spawnExplosion(e.x + TILE / 2, e.y + TILE / 2, 'big');
+          game.score += [100, 200, 300, 400][e.type] || 100;
+          game.kills++;
+          game.enemiesLeft--;
+        }
+        game.enemies = [];
+        break;
     }
   }
 
@@ -701,22 +1052,39 @@ export function useGame() {
     let moved = false;
     if (keys['KeyW'] || keys['ArrowUp']) {
       p.dir = DIR.UP;
-      moved = p.tryMove(0, -p.speed, game.map);
+      moved = p.tryMove(0, -p.speed, game.map, getCols(), getRows());
     } else if (keys['KeyS'] || keys['ArrowDown']) {
       p.dir = DIR.DOWN;
-      moved = p.tryMove(0, p.speed, game.map);
+      moved = p.tryMove(0, p.speed, game.map, getCols(), getRows());
     } else if (keys['KeyA'] || keys['ArrowLeft']) {
       p.dir = DIR.LEFT;
-      moved = p.tryMove(-p.speed, 0, game.map);
+      moved = p.tryMove(-p.speed, 0, game.map, getCols(), getRows());
     } else if (keys['KeyD'] || keys['ArrowRight']) {
       p.dir = DIR.RIGHT;
-      moved = p.tryMove(p.speed, 0, game.map);
+      moved = p.tryMove(p.speed, 0, game.map, getCols(), getRows());
     }
     p.moving = moved;
 
     if (keys['Space']) {
-      const b = p.shoot();
-      if (b) game.bullets.push(b);
+      if (game.mode === 'brawl') {
+        shootBrawl(p);
+      } else {
+        const b = p.shoot();
+        if (b) game.bullets.push(b);
+      }
+    }
+
+    // E键放置地雷
+    if (keys['KeyE'] && game.mode === 'brawl' && game.mineCount > 0) {
+      const gridX = p.col;
+      const gridY = p.row;
+      // 避免在同一格重复放置
+      const alreadyMine = game.mines.some(m => m.alive && m.gridX === gridX && m.gridY === gridY);
+      if (!alreadyMine) {
+        game.mines.push(new Mine(gridX, gridY));
+        game.mineCount--;
+        keys['KeyE'] = false; // 防止连续触发
+      }
     }
 
     for (const e of game.enemies) {
@@ -732,7 +1100,7 @@ export function useGame() {
     if (!game.running || game.paused || game.over) return;
     
     // 处理波次过渡
-    if (game.mode === 'survival' && game.waveTransition) {
+    if ((game.mode === 'survival' || game.mode === 'brawl') && game.waveTransition) {
       game.waveTransitionTimer--;
       if (game.waveTransitionTimer <= 0) {
         game.waveTransition = false;
@@ -749,6 +1117,60 @@ export function useGame() {
       if (game.rapidFireTimer === 0 && game.player) game.player.fireRate = 30;
     }
 
+    // 乱斗模式计时器
+    if (game.mode === 'brawl') {
+      if (game.doubleShotTimer > 0) game.doubleShotTimer--;
+      if (game.tripleShotTimer > 0) game.tripleShotTimer--;
+      if (game.pierceTimer > 0) game.pierceTimer--;
+      if (game.speedBoostTimer > 0) {
+        game.speedBoostTimer--;
+        if (game.speedBoostTimer === 0 && game.player) {
+          game.player.speed = game.playerBaseSpeed;
+        }
+      }
+      // 地雷更新
+      for (const mine of game.mines) {
+        if (mine.alive) mine.update();
+      }
+      // 地雷碰撞检测
+      checkMines();
+      // 飞机动画更新
+      if (game.airstrikeActive) {
+        const canvasH = getRows() * TILE;
+        const canvasW = getCols() * TILE;
+        game.airstrikeY += 4;
+        // 检查是否到达目标位置（击杀目标）
+        for (const target of game.airstrikeTargets) {
+          if (Math.abs(game.airstrikeY - target.y) < 8) {
+            spawnExplosion(target.x, target.y, 'big');
+            spawnExplosion(target.x - 15, target.y + 10, 'medium');
+            // 击杀该目标坐标附近的敌人
+            for (const e of game.enemies) {
+              if (!e.alive) continue;
+              const ex = e.x + TILE / 2;
+              const ey = e.y + TILE / 2;
+              if (Math.abs(ex - target.x) < TILE && Math.abs(ey - target.y) < TILE) {
+                e.alive = false;
+                game.score += [100, 200, 300, 400][e.type] || 100;
+                game.kills++;
+                game.enemiesLeft--;
+                if (e.type === 5) {
+                  game.bossActive = false;
+                  game.bossTank = null;
+                  game.score += 1000;
+                }
+              }
+            }
+          }
+        }
+        if (game.airstrikeY > canvasH + TILE) {
+          game.airstrikeActive = false;
+          game.airstrikeTargets = [];
+        }
+        void canvasW;
+      }
+    }
+
     game.spawnCooldown--;
     if (game.spawnCooldown <= 0) {
       game.spawnCooldown = 120;
@@ -763,9 +1185,11 @@ export function useGame() {
       updateAI(e);
     }
 
+    const cw = getCols() * TILE;
+    const ch = getRows() * TILE;
     for (const b of game.bullets) {
       if (!b.alive) continue;
-      b.update();
+      b.update(cw, ch);
     }
 
     checkBulletCollisions();
@@ -789,15 +1213,22 @@ export function useGame() {
     if (game.mode === 'survival' && game.enemiesLeft <= 0 && game.enemies.filter(e => e.alive).length === 0) {
       startNextWave();
     }
+    
+    // 乱斗模式：检查波次完成
+    if (game.mode === 'brawl' && game.enemiesLeft <= 0 && game.enemies.filter(e => e.alive).length === 0) {
+      startNextBrawlWave();
+    }
   }
 
   // Drawing functions
   function drawMap() {
     if (!ctx.value) return;
     const c = ctx.value;
+    const curRows = getRows();
+    const curCols = getCols();
 
-    for (let r = 0; r < ROWS; r++) {
-      for (let c2 = 0; c2 < COLS; c2++) {
+    for (let r = 0; r < curRows; r++) {
+      for (let c2 = 0; c2 < curCols; c2++) {
         const t = game.map[r][c2];
         const x = c2 * TILE, y = r * TILE;
 
@@ -1038,6 +1469,13 @@ export function useGame() {
       case 'rapidfire': icon = '⚡'; color = '#ffdd00'; break;
       case 'life': icon = '❤'; color = '#ff4466'; break;
       case 'bomb': icon = '💣'; color = '#ff8800'; break;
+      case 'doubleshot': icon = '🔫'; color = '#ff6600'; break;
+      case 'tripleshot': icon = '💥'; color = '#ff00ff'; break;
+      case 'pierce': icon = '🎯'; color = '#00ffcc'; break;
+      case 'speedboost': icon = '🏃'; color = '#00ff88'; break;
+      case 'mine': icon = '💣'; color = '#ff4444'; break;
+      case 'airstrike': icon = '✈️'; color = '#4488ff'; break;
+      default: icon = '?'; color = '#ffffff'; break;
     }
 
     c.strokeStyle = color;
@@ -1058,9 +1496,113 @@ export function useGame() {
     c.restore();
   }
 
+  function drawMines(c: CanvasRenderingContext2D) {
+    for (const mine of game.mines) {
+      if (!mine.alive) continue;
+      c.save();
+      c.globalAlpha = mine.pulse;
+      c.fillStyle = `rgba(255, 60, 60, ${mine.pulse * 0.7})`;
+      c.beginPath();
+      c.arc(mine.x, mine.y, 12, 0, Math.PI * 2);
+      c.fill();
+      c.strokeStyle = '#ff2222';
+      c.lineWidth = 2;
+      c.beginPath();
+      c.arc(mine.x, mine.y, 12, 0, Math.PI * 2);
+      c.stroke();
+      c.font = '14px serif';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.fillStyle = '#ffffff';
+      c.shadowBlur = 0;
+      c.globalAlpha = 1;
+      c.fillText('⚠', mine.x, mine.y);
+      c.restore();
+    }
+  }
+
+  function drawBrawlHUD(c: CanvasRenderingContext2D) {
+    const cw = getCols() * TILE;
+    const hudY = 4;
+    const skills = [
+      { timer: game.tripleShotTimer, icon: '💥', color: '#ff00ff', max: 400 },
+      { timer: game.doubleShotTimer, icon: '🔫', color: '#ff6600', max: 400 },
+      { timer: game.pierceTimer, icon: '🎯', color: '#00ffcc', max: 400 },
+      { timer: game.speedBoostTimer, icon: '🏃', color: '#00ff88', max: 400 },
+      { timer: game.shieldTimer, icon: '🛡', color: '#00aaff', max: 500 },
+    ];
+
+    let xOffset = 8;
+    for (const skill of skills) {
+      if (skill.timer > 0) {
+        c.save();
+        // 背景
+        c.fillStyle = 'rgba(0,0,0,0.6)';
+        c.fillRect(xOffset, hudY, 48, 20);
+        // 技能图标
+        c.font = '14px serif';
+        c.textAlign = 'left';
+        c.textBaseline = 'middle';
+        c.fillText(skill.icon, xOffset + 2, hudY + 10);
+        // 时间条
+        const ratio = skill.timer / skill.max;
+        c.fillStyle = skill.color;
+        c.fillRect(xOffset + 18, hudY + 4, 28 * ratio, 12);
+        c.strokeStyle = skill.color;
+        c.lineWidth = 1;
+        c.strokeRect(xOffset + 18, hudY + 4, 28, 12);
+        c.restore();
+        xOffset += 56;
+      }
+    }
+
+    // 地雷数量
+    if (game.mineCount > 0) {
+      c.save();
+      c.fillStyle = 'rgba(0,0,0,0.7)';
+      c.fillRect(cw - 60, hudY, 52, 20);
+      c.font = '14px serif';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.fillStyle = '#ffffff';
+      c.fillText(`💣x${game.mineCount}`, cw - 34, hudY + 10);
+      c.restore();
+    }
+  }
+
+  function drawAirstrike(c: CanvasRenderingContext2D) {
+    if (!game.airstrikeActive) return;
+    const cw = getCols() * TILE;
+    // 绘制飞机
+    c.save();
+    c.font = '32px serif';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillText('✈️', cw / 2, game.airstrikeY);
+    // 绘制目标标记
+    for (const target of game.airstrikeTargets) {
+      c.strokeStyle = '#ff4444';
+      c.lineWidth = 2;
+      c.beginPath();
+      c.arc(target.x, target.y, 16, 0, Math.PI * 2);
+      c.stroke();
+      c.beginPath();
+      c.moveTo(target.x - 20, target.y);
+      c.lineTo(target.x + 20, target.y);
+      c.stroke();
+      c.beginPath();
+      c.moveTo(target.x, target.y - 20);
+      c.lineTo(target.x, target.y + 20);
+      c.stroke();
+    }
+    c.restore();
+  }
+
   function drawForestOverlay(c: CanvasRenderingContext2D) {
-    for (let r = 0; r < ROWS; r++) {
-      for (let c2 = 0; c2 < COLS; c2++) {
+    const curRows = getRows();
+    const curCols = getCols();
+    for (let r = 0; r < curRows; r++) {
+      for (let c2 = 0; c2 < curCols; c2++) {
         if (game.map[r][c2] === TILE_FOREST) {
           drawForest(c, c2 * TILE, r * TILE);
         }
@@ -1071,25 +1613,32 @@ export function useGame() {
   function render() {
     if (!ctx.value) return;
     const c = ctx.value;
+    const cw = getCols() * TILE;
+    const ch = getRows() * TILE;
 
-    c.clearRect(0, 0, W, H);
+    c.clearRect(0, 0, cw, ch);
     c.fillStyle = '#0d2840';
-    c.fillRect(0, 0, W, H);
+    c.fillRect(0, 0, cw, ch);
 
     // Grid
     c.strokeStyle = 'rgba(0,80,140,0.3)';
     c.lineWidth = 0.5;
-    for (let i = 0; i <= COLS; i++) {
-      c.beginPath(); c.moveTo(i * TILE, 0); c.lineTo(i * TILE, H); c.stroke();
+    for (let i = 0; i <= getCols(); i++) {
+      c.beginPath(); c.moveTo(i * TILE, 0); c.lineTo(i * TILE, ch); c.stroke();
     }
-    for (let i = 0; i <= ROWS; i++) {
-      c.beginPath(); c.moveTo(0, i * TILE); c.lineTo(W, i * TILE); c.stroke();
+    for (let i = 0; i <= getRows(); i++) {
+      c.beginPath(); c.moveTo(0, i * TILE); c.lineTo(cw, i * TILE); c.stroke();
     }
 
     drawMap();
 
     for (const p of game.powerups) {
       if (p.alive) drawPowerup(c, p);
+    }
+
+    // 地雷（乱斗模式）
+    if (game.mode === 'brawl') {
+      drawMines(c);
     }
 
     for (const e of game.enemies) {
@@ -1108,9 +1657,14 @@ export function useGame() {
       if (ex.alive) drawExplosion(c, ex);
     }
 
+    // 飞机动画（乱斗模式）
+    if (game.mode === 'brawl') {
+      drawAirstrike(c);
+    }
+
     // BOSS血条
     if (game.bossActive && game.bossTank && game.bossTank.alive) {
-      const bx = 50, by = 10, bw = W - 100, bh = 20;
+      const bx = 50, by = 10, bw = cw - 100, bh = 20;
       const maxHp = game.bossTank.maxHp || bossHp(game.level);
       const ratio = game.bossTank.hp / maxHp;
       c.fillStyle = '#333';
@@ -1124,31 +1678,37 @@ export function useGame() {
       c.font = 'bold 14px monospace';
       c.textAlign = 'center';
       c.textBaseline = 'middle';
-      c.fillText('BOSS', W / 2, by + 10);
+      c.fillText('BOSS', cw / 2, by + 10);
     }
     
-    // 波次过渡文字
-    if (game.mode === 'survival' && game.waveTransition) {
+    // 波次过渡文字（生存/乱斗模式）
+    if ((game.mode === 'survival' || game.mode === 'brawl') && game.waveTransition) {
       c.fillStyle = 'rgba(0,0,0,0.7)';
-      c.fillRect(0, 0, W, H);
+      c.fillRect(0, 0, cw, ch);
       c.fillStyle = '#ffd700';
       c.font = 'bold 48px monospace';
       c.textAlign = 'center';
       c.textBaseline = 'middle';
-      c.fillText(`第 ${game.wave} 波`, W / 2, H / 2);
+      c.fillText(`第 ${game.wave} 波`, cw / 2, ch / 2);
       c.font = '20px monospace';
       c.fillStyle = '#ffffff';
-      c.fillText('准备迎战!', W / 2, H / 2 + 40);
+      const modeHint = game.mode === 'brawl' ? '技能乱斗!' : '准备迎战!';
+      c.fillText(modeHint, cw / 2, ch / 2 + 40);
+    }
+
+    // 乱斗模式 HUD（技能状态条）
+    if (game.mode === 'brawl' && !game.waveTransition) {
+      drawBrawlHUD(c);
     }
 
     if (game.paused) {
       c.fillStyle = 'rgba(0,0,0,0.5)';
-      c.fillRect(0, 0, W, H);
+      c.fillRect(0, 0, cw, ch);
       c.fillStyle = '#fff';
       c.font = 'bold 36px Courier New';
       c.textAlign = 'center';
       c.textBaseline = 'middle';
-      c.fillText('⏸ 暂停', W / 2, H / 2);
+      c.fillText('⏸ 暂停', cw / 2, ch / 2);
     }
   }
 
@@ -1167,7 +1727,15 @@ export function useGame() {
     
     if (mode === 'survival') {
       startSurvival();
+    } else if (mode === 'brawl') {
+      startBrawl();
     } else {
+      // 重置画布尺寸（经典/生存模式）
+      if (canvasRef.value) {
+        canvasRef.value.width = COLS * TILE;
+        canvasRef.value.height = ROWS * TILE;
+        ctx.value = canvasRef.value.getContext('2d');
+      }
       loadLevel(1);
     }
     
@@ -1184,6 +1752,58 @@ export function useGame() {
     // 重置玩家、敌人等
     spawnPlayer();
     startNextWave();
+  }
+
+  function startBrawl() {
+    game.mode = 'brawl';
+    game.wave = 0;
+    game.brawlHighScore = parseInt(localStorage.getItem('brawlHighScore') || '0');
+    game.map = generateBrawlMap();
+    game.mines = [];
+    game.mineCount = 0;
+    game.doubleShotTimer = 0;
+    game.tripleShotTimer = 0;
+    game.pierceTimer = 0;
+    game.speedBoostTimer = 0;
+    game.airstrikeActive = false;
+    game.airstrikeY = -TILE;
+    game.airstrikeTargets = [];
+    // 适配画布尺寸
+    if (canvasRef.value) {
+      canvasRef.value.width = BRAWL_COLS * TILE;
+      canvasRef.value.height = BRAWL_ROWS * TILE;
+      ctx.value = canvasRef.value.getContext('2d');
+    }
+    spawnBrawlPlayer();
+    startNextBrawlWave();
+  }
+
+  function spawnBrawlPlayer() {
+    const cx = Math.floor(BRAWL_COLS / 2);
+    const py = BRAWL_ROWS - 1;
+    game.player = new Tank(cx * TILE, py * TILE, DIR.UP, true, 2.5, 30, '#44cc88', 1);
+    game.playerBaseSpeed = 2.5;
+    game.shieldTimer = 180;
+  }
+
+  function startNextBrawlWave() {
+    game.wave++;
+    const enemyCount = Math.min(8 + game.wave * 2, 25);
+    game.waveEnemiesLeft = enemyCount;
+    game.totalEnemies = enemyCount;
+    game.enemiesSpawned = 0;
+    game.enemiesLeft = enemyCount;
+    game.bossTank = null;
+    game.bossActive = game.wave % 5 === 0;
+    // 波次过渡
+    game.waveTransition = true;
+    game.waveTransitionTimer = 120;
+    // 每5波刷新地图
+    if (game.wave % 5 === 1 && game.wave > 1) {
+      game.map = generateBrawlMap();
+    }
+    // 刷新乱斗道具
+    spawnRandomBrawlPowerups();
   }
   
   function startNextWave() {

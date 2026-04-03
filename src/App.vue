@@ -66,7 +66,7 @@ watch(() => game.over, (over) => {
       overlayKills.value = `总击杀: ${game.kills} 辆`;
       overlayLevel.value = `到达关卡: 第 ${game.level} / 15 关`;
       overlayWave.value = '';
-    } else {
+    } else if (game.mode === 'survival') {
       // 生存模式结束界面
       overlayTitle.value = '生存结束';
       overlayMessage.value = '你的坦克已阵亡';
@@ -76,6 +76,18 @@ watch(() => game.over, (over) => {
       overlayWave.value = `存活波数: 第 ${game.wave} 波`;
       // 检查是否打破纪录
       if (game.score > 0 && game.score >= game.highScore) {
+        isNewRecord.value = true;
+      }
+    } else if (game.mode === 'brawl') {
+      // 乱斗模式结束界面
+      overlayTitle.value = '乱斗结束';
+      overlayMessage.value = '你的坦克已阵亡';
+      overlayScore.value = `最终得分: ${game.score}`;
+      overlayKills.value = `总击杀: ${game.kills} 辆`;
+      overlayLevel.value = '';
+      overlayWave.value = `存活波数: 第 ${game.wave} 波`;
+      // 检查是否打破纪录
+      if (game.score > 0 && game.score >= game.brawlHighScore) {
         isNewRecord.value = true;
       }
     }
@@ -108,6 +120,13 @@ watch(() => game.over, (over) => {
             <p>无限波次挑战，争夺最高分</p>
             <div v-if="game.highScore > 0" class="high-score">
               最高分: {{ game.highScore }}
+            </div>
+          </div>
+          <div class="mode-card mode-brawl" @click="handleStart('brawl')">
+            <h3>技能乱斗</h3>
+            <p>随机技能掉落，火力全开！</p>
+            <div v-if="game.brawlHighScore > 0" class="high-score">
+              最高分: {{ game.brawlHighScore }}
             </div>
           </div>
         </div>
@@ -154,6 +173,16 @@ watch(() => game.over, (over) => {
           </div>
         </div>
 
+        <!-- 乱斗模式最高分显示 -->
+        <div v-if="game.mode === 'brawl'" class="mt-4 text-center">
+          <div class="text-xl text-[#ffd700]">
+            最高分: {{ game.brawlHighScore }}
+          </div>
+          <div v-if="isNewRecord" class="new-record">
+            新纪录！
+          </div>
+        </div>
+
         <!-- 经典模式结束按钮 -->
         <div v-if="game.mode === 'classic'" class="mt-8">
           <button @click="returnToMenu" class="big-btn">
@@ -162,8 +191,18 @@ watch(() => game.over, (over) => {
         </div>
 
         <!-- 生存模式结束按钮 -->
-        <div v-else class="mt-8 flex gap-4">
+        <div v-else-if="game.mode === 'survival'" class="mt-8 flex gap-4">
           <button @click="restartSurvival" class="big-btn">
+            再来一次
+          </button>
+          <button @click="returnToMenu" class="big-btn btn-secondary">
+            返回主菜单
+          </button>
+        </div>
+
+        <!-- 乱斗模式结束按钮 -->
+        <div v-else-if="game.mode === 'brawl'" class="mt-8 flex gap-4">
+          <button @click="handleStart('brawl')" class="big-btn">
             再来一次
           </button>
           <button @click="returnToMenu" class="big-btn btn-secondary">
@@ -197,8 +236,8 @@ watch(() => game.over, (over) => {
       <div @click="canvasRef?.focus()">
         <canvas 
           ref="canvasRef"
-          width="624" 
-          height="624"
+          :width="game.mode === 'brawl' ? 816 : 624" 
+          :height="game.mode === 'brawl' ? 816 : 624"
           tabindex="0"
           class="game-canvas"
         />
@@ -227,7 +266,7 @@ watch(() => game.over, (over) => {
           </template>
           
           <!-- 生存模式：波次 -->
-          <template v-else>
+          <template v-else-if="game.mode === 'survival'">
             <div class="stat-row">
               <span class="stat-label">波次</span>
               <span class="stat-value wave-value">第 {{ game.wave }} 波</span>
@@ -236,6 +275,23 @@ watch(() => game.over, (over) => {
             <div class="stat-row">
               <span class="stat-label">最高分</span>
               <span class="stat-value high-score-value">{{ game.highScore }}</span>
+            </div>
+          </template>
+          
+          <!-- 乱斗模式：波次和最高分 -->
+          <template v-else-if="game.mode === 'brawl'">
+            <div class="stat-row">
+              <span class="stat-label">波次</span>
+              <span class="stat-value wave-value">第 {{ game.wave }} 波</span>
+            </div>
+            <!-- 乱斗模式最高分 -->
+            <div class="stat-row">
+              <span class="stat-label">最高分</span>
+              <span class="stat-value high-score-value">{{ game.brawlHighScore }}</span>
+            </div>
+            <!-- BOSS关卡标识 -->
+            <div v-if="game.bossActive" class="boss-indicator">
+              BOSS关卡
             </div>
           </template>
           
@@ -270,7 +326,7 @@ watch(() => game.over, (over) => {
         </div>
 
         <!-- 生存模式：本波剩余 -->
-        <div v-else class="panel">
+        <div v-else-if="game.mode === 'survival'" class="panel">
           <div class="panel-title">本波剩余</div>
           <div class="text-center py-1.5">
             <span class="enemy-count">{{ Math.max(0, game.waveEnemiesLeft) }}</span>
@@ -280,6 +336,71 @@ watch(() => game.over, (over) => {
                  :key="i" 
                  class="enemy-icon">
             </div>
+          </div>
+        </div>
+
+        <!-- 乱斗模式：本波剩余 + 当前技能 -->
+        <div v-else-if="game.mode === 'brawl'" class="panel">
+          <div class="panel-title">本波剩余</div>
+          <div class="text-center py-1.5">
+            <span class="enemy-count">{{ Math.max(0, game.waveEnemiesLeft) }}</span>
+          </div>
+          <div class="flex flex-wrap gap-0.5 mt-1.5">
+            <div v-for="i in Math.min(Math.max(0, game.waveEnemiesLeft), 20)" 
+                 :key="i" 
+                 class="enemy-icon">
+            </div>
+          </div>
+        </div>
+
+        <!-- 乱斗模式：当前技能 -->
+        <div v-if="game.mode === 'brawl' && game.running" class="panel brawl-skills-panel">
+          <div class="panel-title">当前技能</div>
+          <div class="skills-list">
+            <div v-if="game.tripleShotTimer > 0" class="skill-item">
+              <span class="skill-icon">💥</span>
+              <span class="skill-name">三向散射</span>
+              <div class="skill-bar">
+                <div class="skill-progress" :style="{ width: (game.tripleShotTimer / 400 * 100) + '%' }"></div>
+              </div>
+            </div>
+            <div v-if="game.doubleShotTimer > 0" class="skill-item">
+              <span class="skill-icon">🔫</span>
+              <span class="skill-name">双发</span>
+              <div class="skill-bar">
+                <div class="skill-progress" :style="{ width: (game.doubleShotTimer / 400 * 100) + '%' }"></div>
+              </div>
+            </div>
+            <div v-if="game.pierceTimer > 0" class="skill-item">
+              <span class="skill-icon">🎯</span>
+              <span class="skill-name">穿透</span>
+              <div class="skill-bar">
+                <div class="skill-progress" :style="{ width: (game.pierceTimer / 400 * 100) + '%' }"></div>
+              </div>
+            </div>
+            <div v-if="game.shieldTimer > 0" class="skill-item">
+              <span class="skill-icon">🛡</span>
+              <span class="skill-name">护盾</span>
+              <div class="skill-bar">
+                <div class="skill-progress shield" :style="{ width: (game.shieldTimer / 500 * 100) + '%' }"></div>
+              </div>
+            </div>
+            <div v-if="game.speedBoostTimer > 0" class="skill-item">
+              <span class="skill-icon">🏃</span>
+              <span class="skill-name">速度爆发</span>
+              <div class="skill-bar">
+                <div class="skill-progress speed" :style="{ width: (game.speedBoostTimer / 400 * 100) + '%' }"></div>
+              </div>
+            </div>
+          </div>
+          <!-- 地雷持有数量 -->
+          <div v-if="game.mineCount > 0" class="mine-count">
+            <span class="mine-icon">💣</span>
+            <span class="mine-text">× {{ game.mineCount }}</span>
+          </div>
+          <!-- 地雷按键提示 -->
+          <div v-if="game.mineCount > 0" class="mine-hint">
+            按 <span class="ctrl-key">E</span> 放置地雷
           </div>
         </div>
 

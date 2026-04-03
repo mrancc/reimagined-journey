@@ -18,10 +18,22 @@ export const TILE_BASE = 5;
 
 // Powerup types
 export const POWERUP_TYPES = ['shield', 'rapidfire', 'life', 'bomb'] as const;
-export type PowerupType = typeof POWERUP_TYPES[number];
+
+// Brawl mode powerup types
+export const BRAWL_POWERUP_TYPES = [
+  'doubleshot', 'tripleshot', 'pierce', 'shield',
+  'speedboost', 'mine', 'airstrike', 'bomb'
+] as const
+export type BrawlPowerupType = typeof BRAWL_POWERUP_TYPES[number]
+
+export type PowerupType = typeof POWERUP_TYPES[number] | BrawlPowerupType
 
 // 游戏模式
-export type GameMode = 'classic' | 'survival'
+export type GameMode = 'classic' | 'survival' | 'brawl'
+
+// Brawl mode map constants
+export const BRAWL_COLS = 17
+export const BRAWL_ROWS = 17
 
 // 波次配置（生存模式）
 export interface WaveConfig {
