@@ -1,5 +1,4 @@
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8920599655980690"
-     crossorigin="anonymous"></script>
+
 <script setup lang="ts">
 import { ref } from 'vue'
 import viteLogo from '../assets/vite.svg'
