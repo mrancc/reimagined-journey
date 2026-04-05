@@ -8,13 +8,13 @@
 - [useGame.ts](file://src/composables/useGame.ts)
 - [game.ts](file://src/types/game.ts)
 - [style.css](file://src/style.css)
-- [README.md](file://README.md)
 - [package.json](file://package.json)
 </cite>
 
 ## 更新摘要
 **变更内容**
 - App.vue 组件进行了重大 UI 重构，包括全新的模式选择界面、波次过渡界面、胜利条件显示等
+- HelloWorld 组件的代码格式得到显著改进，提升了代码可读性和维护性
 - 新增覆盖层系统，支持模式选择和结束界面的动态切换
 - 增强的样式系统，使用 Tailwind CSS 和自定义样式类
 - 新增波次过渡动画和 BOSS 关卡标识
@@ -33,7 +33,7 @@
 10. [附录](#附录)
 
 ## 简介
-本项目是一个基于 Vue 3 Composition API 的坦克对战游戏，采用单页应用架构，根组件负责游戏全局状态与 UI 布局，通过可组合函数集中管理游戏逻辑与 Canvas 渲染。经过重大 UI 重构后，App.vue 组件现在提供了完整的用户界面体验，包括模式选择、波次过渡、胜利条件显示等功能。本文档系统性解析组件设计模式、根组件职责、组件通信、props 与事件处理、生命周期管理、响应式数据绑定在游戏场景中的应用，并总结组件复用、插槽与组合的最佳实践。
+本项目是一个基于 Vue 3 Composition API 的坦克对战游戏，采用单页应用架构，根组件负责游戏全局状态与 UI 布局，通过可组合函数集中管理游戏逻辑与 Canvas 渲染。经过重大 UI 重构后，App.vue 组件现在提供了完整的用户界面体验，包括模式选择、波次过渡、胜利条件显示等功能。HelloWorld 组件也经过了代码格式改进，提升了代码质量和可维护性。本文档系统性解析组件设计模式、根组件职责、组件通信、props 与事件处理、生命周期管理、响应式数据绑定在游戏场景中的应用，并总结组件复用、插槽与组合的最佳实践。
 
 ## 项目结构
 项目采用典型的 Vue 3 单文件组件（SFC）与组合式 API 结构，经过重构后具有更完善的 UI 层：
@@ -42,7 +42,7 @@
 - 可组合函数：useGame.ts 提供游戏状态、AI、碰撞检测、渲染与生命周期钩子
 - 类型定义：game.ts 定义常量、类型与地图生成算法
 - 样式系统：style.css 提供 Tailwind CSS 基础和自定义样式类
-- 示例组件：HelloWorld.vue 展示基础 Composition API 使用方式
+- 示例组件：HelloWorld.vue 展示基础 Composition API 使用方式，经过格式改进后更具可读性
 
 ```mermaid
 graph TB
@@ -54,18 +54,20 @@ B --> F["侧边栏面板<br/>统计与控制"]
 B --> G["覆盖层系统<br/>模式选择/结束界面"]
 B --> H["波次过渡界面<br/>生存模式特有"]
 B --> I["样式系统<br/>Tailwind CSS + 自定义"]
+J["HelloWorld.vue<br/>格式改进的示例组件"]
+B --> J
 ```
 
 **图表来源**
 - [main.ts:1-6](file://src/main.ts#L1-L6)
-- [App.vue:1-305](file://src/App.vue#L1-L305)
+- [App.vue:1-426](file://src/App.vue#L1-L426)
 - [useGame.ts:264-1282](file://src/composables/useGame.ts#L264-L1282)
 - [game.ts:1-300](file://src/types/game.ts#L1-L300)
-- [style.css:1-439](file://src/style.css#L1-L439)
+- [style.css:1-554](file://src/style.css#L1-L554)
+- [HelloWorld.vue:1-96](file://src/components/HelloWorld.vue#L1-L96)
 
 **章节来源**
 - [main.ts:1-6](file://src/main.ts#L1-L6)
-- [README.md:1-6](file://README.md#L1-L6)
 - [package.json:1-26](file://package.json#L1-L26)
 
 ## 核心组件
@@ -84,14 +86,15 @@ B --> I["样式系统<br/>Tailwind CSS + 自定义"]
 - **样式系统 style.css**
   - **职责**：提供 Tailwind CSS 基础样式和自定义样式类，包括模式选择界面、波次过渡界面、BOSS 关卡标识、新纪录动画等
 - **示例组件 HelloWorld.vue**
-  - **职责**：演示 Composition API 基础用法（ref、模板引用、事件处理），作为学习参考
+  - **职责**：演示 Composition API 基础用法（ref、模板引用、事件处理），经过格式改进后代码结构更加清晰
+  - **更新**：采用标准的 `<script setup>` 语法，导入语句规范化，模板结构优化，提升了代码可读性和维护性
 
 **章节来源**
-- [App.vue:1-305](file://src/App.vue#L1-L305)
+- [App.vue:1-426](file://src/App.vue#L1-L426)
 - [useGame.ts:264-1282](file://src/composables/useGame.ts#L264-L1282)
 - [game.ts:1-300](file://src/types/game.ts#L1-L300)
-- [style.css:1-439](file://src/style.css#L1-L439)
-- [HelloWorld.vue:1-94](file://src/components/HelloWorld.vue#L1-L94)
+- [style.css:1-554](file://src/style.css#L1-L554)
+- [HelloWorld.vue:1-96](file://src/components/HelloWorld.vue#L1-L96)
 
 ## 架构总览
 整体架构围绕"根组件 + 可组合函数 + 完整 UI 层"的模式展开：
@@ -100,6 +103,7 @@ B --> I["样式系统<br/>Tailwind CSS + 自定义"]
 - game.ts 提供类型与地图/波次规则
 - style.css 提供完整的样式系统
 - main.ts 仅负责应用挂载
+- HelloWorld 组件作为学习参考，展示了改进后的代码格式最佳实践
 
 ```mermaid
 graph TB
@@ -109,8 +113,9 @@ Sidebar["侧边栏面板<br/>统计与控制"]
 Overlay["覆盖层系统<br/>模式选择/结束界面"]
 WaveOverlay["波次过渡界面<br/>生存模式特有"]
 Canvas["Canvas<br/>游戏画布"]
-EndPanel["结束界面<br/>经典/生存模式"]
-ModeSelect["模式选择界面<br/>经典/生存模式"]
+EndPanel["结束界面<br/>经典/生存/乱斗模式"]
+ModeSelect["模式选择界面<br/>经典/生存/乱斗模式"]
+HelloWorld["HelloWorld.vue<br/>格式改进的示例"]
 end
 subgraph "逻辑层"
 Composable["useGame.ts<br/>游戏状态与逻辑"]
@@ -125,16 +130,19 @@ Root --> WaveOverlay
 Root --> Canvas
 Root --> Style
 Root --> Composable
+Root --> HelloWorld
 Composable --> Types
 Overlay --> ModeSelect
 Overlay --> EndPanel
+HelloWorld --> Style
 ```
 
 **图表来源**
-- [App.vue:86-305](file://src/App.vue#L86-L305)
+- [App.vue:86-426](file://src/App.vue#L86-L426)
 - [useGame.ts:264-1282](file://src/composables/useGame.ts#L264-L1282)
 - [game.ts:1-300](file://src/types/game.ts#L1-L300)
-- [style.css:1-439](file://src/style.css#L1-L439)
+- [style.css:1-554](file://src/style.css#L1-L554)
+- [HelloWorld.vue:1-96](file://src/components/HelloWorld.vue#L1-L96)
 
 ## 详细组件分析
 
@@ -142,7 +150,7 @@ Overlay --> EndPanel
 **更新** 经过重大 UI 重构，App.vue 现在提供了完整的用户界面体验：
 
 - **视图组织**
-  - **模式选择界面**：点击卡片触发 handleStart，支持 classic 与 survival 两种模式，包含最高分显示
+  - **模式选择界面**：点击卡片触发 handleStart，支持 classic、survival 与 brawl 三种模式，包含最高分显示
   - **结束界面**：根据 game.mode 与 game.over 动态渲染标题/消息/统计/按钮，支持新纪录动画
   - **波次过渡**：当 game.waveTransition 为真时显示"第 X 波"提示，包含动画效果
   - **侧边栏**：显示分数、关卡/波次、最高分、击杀、玩家生命、剩余敌人/本波剩余、操作说明
@@ -176,7 +184,7 @@ R-->>U : 渲染侧边栏/覆盖层/Canvas
 - [useGame.ts:1155-1176](file://src/composables/useGame.ts#L1155-L1176)
 
 **章节来源**
-- [App.vue:1-305](file://src/App.vue#L1-L305)
+- [App.vue:1-426](file://src/App.vue#L1-L426)
 
 ### 可组合函数 useGame.ts：游戏状态与渲染
 **更新** 扩展了游戏状态字段以支持新的 UI 功能：
@@ -210,7 +218,7 @@ Enemies --> Bullets["更新子弹位置"]
 Bullets --> Collisions["碰撞检测与处理"]
 Collisions --> Powerups["检查道具拾取"]
 Powerups --> Cleanup["清理死亡对象"]
-Cleanup --> SurvCheck{"生存模式？"}
+Cleanup --> SurvCheck{"生存/乱斗模式？"}
 SurvCheck --> |是| WaveDone{"本波结束？"}
 SurvCheck --> |否| ClassicDone{"经典模式？"}
 WaveDone --> |是| NextWave["开始下一波"]
@@ -253,7 +261,7 @@ LevelDone --> |否| End
 - **模式选择界面样式**
   - .mode-select：模式卡片容器
   - .mode-card：通用卡片样式
-  - .mode-classic/.mode-survival：经典模式绿色主题和生存模式红色主题
+  - .mode-classic/.mode-survival/.mode-brawl：经典模式绿色主题、生存模式红色主题、乱斗模式紫色主题
   - .high-score：最高分显示样式
 - **波次过渡界面样式**
   - .wave-transition-overlay：波次过渡覆盖层
@@ -268,17 +276,37 @@ LevelDone --> |否| End
   - @keyframes record-blink：新纪录闪烁动画
 - **游戏结束界面增强**
   - .game-over-survival：生存模式结束界面样式
+  - .big-btn：主要按钮样式，支持 hover 效果
   - .btn-secondary：次要按钮样式
 
 **章节来源**
-- [style.css:1-439](file://src/style.css#L1-L439)
+- [style.css:1-554](file://src/style.css#L1-L554)
 
-### 示例组件 HelloWorld.vue：Composition API 基础
-- 展示了 ref、模板引用与事件绑定的基础用法，适合理解 Vue 3 SFC 与脚本设置语法
-- 与主游戏无直接耦合，仅作学习参考
+### 示例组件 HelloWorld.vue：Composition API 基础与格式改进
+**更新** HelloWorld 组件经过了显著的代码格式改进，提升了代码可读性和维护性：
+
+- **标准化的 `<script setup>` 语法**
+  - 使用 `import { ref } from 'vue'` 导入响应式 API
+  - 采用 `const count = ref(0)` 的简洁声明方式
+  - 将导入语句集中在文件顶部，便于维护
+- **优化的模板结构**
+  - 使用清晰的分段结构，通过 `<div class="ticks"></div>` 分隔不同区域
+  - 采用语义化的 ID 命名：`id="center"`、`id="next-steps"`、`id="docs"`、`id="social"`
+  - 图片资源通过相对路径导入，便于模块化管理
+- **改进的代码组织**
+  - 导入语句按功能分组：组件资源导入、第三方库导入
+  - 模板内容按逻辑分组，使用注释分隔符 `<div class="ticks"></div>`
+  - 事件处理与数据绑定分离，提高可读性
+- **响应式数据管理**
+  - 使用 `ref` 管理组件状态，支持响应式更新
+  - 事件处理器通过箭头函数定义，保持上下文绑定
+- **学习价值**
+  - 展示了 Composition API 的最佳实践
+  - 体现了现代 Vue 3 开发的标准格式
+  - 为其他组件提供了格式规范参考
 
 **章节来源**
-- [HelloWorld.vue:1-94](file://src/components/HelloWorld.vue#L1-L94)
+- [HelloWorld.vue:1-96](file://src/components/HelloWorld.vue#L1-L96)
 
 ## 依赖关系分析
 **更新** 重构后的依赖关系更加清晰：
@@ -293,6 +321,8 @@ LevelDone --> |否| End
   - style.css 为所有组件提供统一的视觉风格
 - **类型依赖**
   - game.ts 为 useGame 与 App 提供类型与规则支撑
+- **示例组件依赖**
+  - HelloWorld.vue 依赖 Vue 基础 API 和本地资源
 
 ```mermaid
 graph LR
@@ -302,6 +332,8 @@ A --> S["style.css"]
 U --> T["game.ts"]
 A --> T
 S --> A
+HW["HelloWorld.vue"] --> V["Vue 基础API"]
+HW --> AS["本地资源"]
 ```
 
 **图表来源**
@@ -309,7 +341,8 @@ S --> A
 - [App.vue:1-10](file://src/App.vue#L1-L10)
 - [useGame.ts:1-10](file://src/composables/useGame.ts#L1-L10)
 - [game.ts:1-300](file://src/types/game.ts#L1-L300)
-- [style.css:1-439](file://src/style.css#L1-L439)
+- [style.css:1-554](file://src/style.css#L1-L554)
+- [HelloWorld.vue:1-96](file://src/components/HelloWorld.vue#L1-L96)
 
 **章节来源**
 - [package.json:1-26](file://package.json#L1-L26)
@@ -330,6 +363,9 @@ S --> A
 - **UI 渲染优化**
   - 条件渲染覆盖层和波次界面，避免不必要的 DOM 操作
   - 使用 CSS 动画而非 JavaScript 动画，提高性能
+- **组件优化**
+  - HelloWorld 组件采用轻量级设计，减少不必要的响应式开销
+  - 模板结构优化，减少虚拟 DOM 比较成本
 
 ## 故障排查指南
 **更新** 针对新 UI 架构的故障排查：
@@ -341,7 +377,7 @@ S --> A
 - **模式选择界面不显示**
   - 症状：游戏启动后直接进入游戏画面
   - 排查：确认 game.running 和 game.over 状态正确初始化，showOverlay 为 true
-  - 参考路径：[App.vue:92-119](file://src/App.vue#L92-L119)
+  - 参考路径：[App.vue:92-138](file://src/App.vue#L92-L138)
 - **波次过渡界面不显示**
   - 症状：生存模式波次切换无提示
   - 排查：确认 game.waveTransition 与 game.waveTransitionTimer 的更新逻辑
@@ -349,19 +385,24 @@ S --> A
 - **新纪录动画不显示**
   - 症状：生存模式最高分更新但无动画效果
   - 排查：确认 isNewRecord 状态更新和 CSS 动画类应用
-  - 参考路径：[App.vue:152-155](file://src/App.vue#L152-L155)、[style.css:402-422](file://src/style.css#L402-L422)
+  - 参考路径：[App.vue:171-174](file://src/App.vue#L171-L174)、[style.css:402-422](file://src/style.css#L402-L422)
 - **样式问题**
   - 症状：UI 样式异常或组件样式丢失
   - 排查：确认 Tailwind CSS 正确导入，CSS 类名与模板匹配
-  - 参考路径：[style.css:1-439](file://src/style.css#L1-L439)
+  - 参考路径：[style.css:1-554](file://src/style.css#L1-L554)
+- **HelloWorld 组件问题**
+  - 症状：组件无法正常显示或交互
+  - 排查：确认 `<script setup>` 语法正确，导入语句顺序合理，模板结构完整
+  - 参考路径：[HelloWorld.vue:1-96](file://src/components/HelloWorld.vue#L1-L96)
 
 **章节来源**
-- [App.vue:46-155](file://src/App.vue#L46-L155)
+- [App.vue:46-174](file://src/App.vue#L46-L174)
 - [useGame.ts:1130-1265](file://src/composables/useGame.ts#L1130-L1265)
-- [style.css:1-439](file://src/style.css#L1-L439)
+- [style.css:1-554](file://src/style.css#L1-L554)
+- [HelloWorld.vue:1-96](file://src/components/HelloWorld.vue#L1-L96)
 
 ## 结论
-**更新** 经过重大 UI 重构后，本项目通过"根组件 + 可组合函数 + 完整 UI 层"的架构实现了更加完善的用户体验：根组件专注完整的 UI 与交互，useGame 负责复杂的游戏逻辑与渲染，game.ts 提供规则与类型保障，style.css 提供统一的视觉设计。该模式具备良好的可扩展性与可维护性，适合在大型游戏中推广。建议后续引入插槽与组件组合以进一步提升复用性，并完善错误边界与日志监控以增强稳定性。
+**更新** 经过重大 UI 重构后，本项目通过"根组件 + 可组合函数 + 完整 UI 层"的架构实现了更加完善的用户体验：根组件专注完整的 UI 与交互，useGame 负责复杂的游戏逻辑与渲染，game.ts 提供规则与类型保障，style.css 提供统一的视觉设计。HelloWorld 组件的代码格式改进进一步提升了项目的整体质量。该模式具备良好的可扩展性与可维护性，适合在大型游戏中推广。建议后续引入插槽与组件组合以进一步提升复用性，并完善错误边界与日志监控以增强稳定性。
 
 ## 附录
 - **项目启动与构建**
@@ -371,12 +412,16 @@ S --> A
 - **技术栈**
   - Vue 3 + TypeScript + Vite + TailwindCSS + CSS 动画
 - **新增功能特性**
-  - 完整的模式选择界面
+  - 完整的模式选择界面（经典/生存/乱斗）
   - 波次过渡动画系统
   - BOSS 关卡视觉标识
   - 新纪录动画效果
   - 响应式布局设计
+- **代码格式改进**
+  - HelloWorld 组件采用标准化的 `<script setup>` 语法
+  - 导入语句规范化，提升可维护性
+  - 模板结构优化，增强可读性
+  - 响应式数据管理最佳实践
 
 **章节来源**
 - [package.json:6-10](file://package.json#L6-L10)
-- [README.md:1-6](file://README.md#L1-L6)
